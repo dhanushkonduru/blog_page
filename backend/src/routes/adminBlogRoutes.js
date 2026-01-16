@@ -16,7 +16,7 @@ const blogRules = [
   body("title").notEmpty().withMessage("Title required"),
   body("content").notEmpty().withMessage("Content required"),
   body("status").optional().isIn(["Published", "Draft"]).withMessage("Invalid status"),
-  body("coverImageUrl").optional().isURL().withMessage("Cover image must be a URL"),
+  body("coverImageUrl").optional({ checkFalsy: true }).isURL().withMessage("Cover image must be a URL"),
   body("excerpt").optional().isLength({ max: 300 }).withMessage("Excerpt too long")
 ];
 

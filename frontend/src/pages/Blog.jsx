@@ -52,6 +52,14 @@ export default function Blog() {
           src={blog.coverImageUrl}
           alt={blog.title}
           className="mt-6 w-full rounded-sm border border-gray-200"
+          loading="lazy"
+          onError={(e) => {
+            console.error("Image failed to load:", blog.coverImageUrl);
+            e.target.style.display = "none";
+          }}
+          onLoad={() => {
+            console.log("Image loaded successfully");
+          }}
         />
       )}
       <div className="prose mt-8 text-gray-800">
