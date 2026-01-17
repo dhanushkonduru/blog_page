@@ -1,7 +1,7 @@
-# Minimal MERN Blog
+# Premium MERN Blog Platform
 
-Simple, modern MERN blog with admin-only JWT auth, Markdown posts, and a clean
-typography-focused UI.
+Premium minimal MERN blog with admin-only JWT auth, Markdown posts, and a
+SaaS-style layout built with Tailwind CSS.
 
 ## Structure
 - `backend/` Express + MongoDB + JWT
@@ -19,7 +19,7 @@ typography-focused UI.
    - `MONGO_URI=mongodb://127.0.0.1:27017/minimal_blog`
    - `JWT_SECRET=change_this_secret`
    - `CLIENT_URL=http://localhost:5173`
-   - `ADMIN_EMAIL=admin@example.com`
+   - `ADMIN_USERNAME=admin`
    - `ADMIN_PASSWORD=admin123`
 4. Seed data: `npm run seed`
 5. Run server: `npm run dev`
@@ -33,7 +33,8 @@ typography-focused UI.
 
 ## API Overview
 - `POST /api/auth/login` admin login
-- `GET /api/blogs` list published blogs (pagination via `page`, `limit`)
+- `GET /api/blogs` list published blogs (pagination via `page`, `limit`, filter by `category`)
+- `GET /api/blogs/categories` list available categories
 - `GET /api/blogs/:slug` published blog by slug
 - `GET /api/admin/blogs` list all blogs (protected)
 - `POST /api/admin/blogs` create blog (protected)

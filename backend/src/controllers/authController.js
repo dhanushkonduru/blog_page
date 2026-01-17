@@ -7,10 +7,10 @@ const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
 export const loginAdmin = asyncHandler(async (req, res) => {
-  const email = sanitizeText(req.body.email);
+  const username = sanitizeText(req.body.username).toLowerCase();
   const password = req.body.password || "";
 
-  const admin = await Admin.findOne({ email });
+  const admin = await Admin.findOne({ username });
   if (!admin) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
@@ -22,6 +22,6 @@ export const loginAdmin = asyncHandler(async (req, res) => {
 
   res.json({
     token: signToken(admin._id),
-    admin: { id: admin._id, email: admin.email }
+    admin: { id: admin._id, username: admin.username }
   });
 });

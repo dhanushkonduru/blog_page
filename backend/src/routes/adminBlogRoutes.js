@@ -15,9 +15,12 @@ const router = express.Router();
 const blogRules = [
   body("title").notEmpty().withMessage("Title required"),
   body("content").notEmpty().withMessage("Content required"),
+  body("category").notEmpty().withMessage("Category required"),
+  body("author").notEmpty().withMessage("Author required"),
   body("status").optional().isIn(["Published", "Draft"]).withMessage("Invalid status"),
-  body("coverImageUrl").optional({ checkFalsy: true }).isURL().withMessage("Cover image must be a URL"),
-  body("excerpt").optional().isLength({ max: 300 }).withMessage("Excerpt too long")
+  body("coverImage").notEmpty().withMessage("Cover image required"),
+  body("coverImage").isURL().withMessage("Cover image must be a URL"),
+  body("excerpt").optional().isLength({ max: 200 }).withMessage("Excerpt too long")
 ];
 
 router.use(protect);

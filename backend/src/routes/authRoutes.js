@@ -8,7 +8,11 @@ const router = express.Router();
 router.post(
   "/login",
   [
-    body("email").isEmail().withMessage("Valid email required"),
+    body("username")
+      .notEmpty()
+      .withMessage("Username required")
+      .isLength({ min: 3 })
+      .withMessage("Username must be at least 3 characters"),
     body("password").isLength({ min: 6 }).withMessage("Password required")
   ],
   validate,

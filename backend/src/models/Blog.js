@@ -7,7 +7,9 @@ const blogSchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true },
     content: { type: String, required: true },
     excerpt: { type: String, trim: true },
-    coverImageUrl: { type: String, trim: true },
+    coverImage: { type: String, required: true, trim: true },
+    category: { type: String, required: true, trim: true },
+    author: { type: String, required: true, trim: true },
     status: {
       type: String,
       enum: ["Published", "Draft"],
@@ -22,7 +24,7 @@ blogSchema.pre("validate", function (next) {
     this.slug = slugify(this.title, { lower: true, strict: true });
   }
   if (!this.excerpt && this.content) {
-    this.excerpt = this.content.slice(0, 150);
+    this.excerpt = this.content.slice(0, 160);
   }
   next();
 });

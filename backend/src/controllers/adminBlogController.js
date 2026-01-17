@@ -25,14 +25,18 @@ export const createBlog = asyncHandler(async (req, res) => {
   const title = sanitizeText(req.body.title);
   const content = req.body.content || "";
   const excerpt = sanitizeText(buildExcerpt(content, req.body.excerpt));
-  const coverImageUrl = sanitizeUrl(req.body.coverImageUrl || "");
+  const coverImage = sanitizeUrl(req.body.coverImage || "");
+  const category = sanitizeText(req.body.category || "");
+  const author = sanitizeText(req.body.author || "");
   const status = req.body.status || "Draft";
 
   const blog = await Blog.create({
     title,
     content,
     excerpt,
-    coverImageUrl,
+    coverImage,
+    category,
+    author,
     status,
     slug: slugify(title, { lower: true, strict: true })
   });
@@ -49,13 +53,17 @@ export const updateBlog = asyncHandler(async (req, res) => {
   const title = sanitizeText(req.body.title ?? blog.title);
   const content = req.body.content ?? blog.content;
   const excerpt = sanitizeText(buildExcerpt(content, req.body.excerpt ?? blog.excerpt));
-  const coverImageUrl = sanitizeUrl(req.body.coverImageUrl ?? blog.coverImageUrl);
+  const coverImage = sanitizeUrl(req.body.coverImage ?? blog.coverImage);
+  const category = sanitizeText(req.body.category ?? blog.category);
+  const author = sanitizeText(req.body.author ?? blog.author);
   const status = req.body.status ?? blog.status;
 
   blog.title = title;
   blog.content = content;
   blog.excerpt = excerpt;
-  blog.coverImageUrl = coverImageUrl;
+  blog.coverImage = coverImage;
+  blog.category = category;
+  blog.author = author;
   blog.status = status;
   blog.slug = slugify(title, { lower: true, strict: true });
 
