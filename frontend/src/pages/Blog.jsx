@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -11,6 +11,7 @@ import AuthorCard from "../components/AuthorCard.jsx";
 
 export default function Blog() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [blog, setBlog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -59,58 +60,91 @@ export default function Blog() {
   if (!blog) return null;
 
   return (
-    <article className="page-fade">
-      <div className="flex flex-wrap gap-2">
-        <Tag label={blog.category} />
-      </div>
-      <p className="mt-4 text-sm text-gray-500">
-        {new Date(blog.createdAt).toLocaleDateString()}
-      </p>
-      <h1 className="mt-3 text-4xl font-semibold text-gray-900 md:text-5xl">
-        {blog.title}
-      </h1>
-      <p className="mt-4 max-w-2xl text-base text-gray-600">{blog.excerpt}</p>
+    <article className="page-fade pt-10">
+     <div className="mx-auto max-w-7xl px-6 lg:px-12">
 
-      <div className="relative left-1/2 right-1/2 mt-10 w-screen -translate-x-1/2">
-        <img
-          src={blog.coverImage}
-          alt={blog.title}
-          className="h-[320px] w-full object-cover md:h-[420px]"
-          loading="lazy"
-        />
-      </div>
 
-      <div className="mx-auto mt-10 max-w-[700px]">
-        <div className="prose prose-gray">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-            {blog.content}
-          </ReactMarkdown>
-        </div>
+  {/* Meta */}
+  <div className="flex items-center gap-3 text-sm text-gray-500">
+    <Tag label={blog.category} />
+    <span className="text-gray-300">•</span>
+    <span>{new Date(blog.createdAt).toLocaleDateString()}</span>
+  </div>
 
-        <div className="mt-12">
-          <AuthorCard name={blog.author} subtitle="Author" />
-        </div>
-      </div>
+  {/* Title */}
+  <h1 className="mt-6 text-4xl font-semibold tracking-tight md:text-5xl">
+    {blog.title}
+  </h1>
 
-      <section className="mt-16">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-gray-900">Related posts</h2>
-          <Link to="/" className="text-sm font-semibold text-blue-600">
-            View all
-          </Link>
-        </div>
-        {related.length === 0 ? (
-          <p className="mt-6 text-sm text-gray-500">
-            More stories are coming soon.
-          </p>
-        ) : (
-          <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {related.map((item) => (
-              <BlogCard key={item._id} blog={item} />
-            ))}
-          </div>
-        )}
-      </section>
+  {/* Excerpt */}
+  <p className="mt-4 max-w-2xl text-lg text-gray-600">
+    {blog.excerpt}
+  </p>
+</div>
+      <div className="mx-auto mt-12 mb-12 max-w-7xl px-6 lg:px-12">
+  <img
+    src={blog.coverImage}
+    alt={blog.title}
+    className="w-full rounded-xl object-contain"
+    loading="lazy"
+  />
+</div>
+
+
+
+{/* CONTENT + AUTHOR */}
+<div className="mx-auto mt-16 max-w-7xl px-6 lg:px-12">
+
+  {/* BLOG CONTENT */}
+  <div className="prose prose-gray prose-lg max-w-none">
+
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeSanitize]}
+    >
+      {blog.content}
+    </ReactMarkdown>
+  </div>
+
+  {/* AUTHOR */}
+  <div className="mt-16">
+    <AuthorCard name={blog.author} subtitle="Author" />
+  </div>
+
+</div>
+
+      <section className="mt-20 pt-6 border-t border-gray-100">
+  <div className="mx-auto max-w-[88rem] px-8 lg:px-16">
+
+    <div className="flex items-center justify-between">
+      <h2 className="text-2xl font-semibold text-gray-900">
+  More in <span className="text-blue-600">{blog.category}</span>
+</h2>
+
+      <Link
+        to="/"
+        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+      >
+        View all
+      </Link>
+    </div>
+
+    {related.length === 0 ? (
+  <p className="mt-6 text-sm text-gray-500">
+    More stories are coming soon.
+  </p>
+) : (
+  <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {related.map((post) => (
+      <BlogCard key={post._id} blog={post} />
+    ))}
+  </div>
+)}
+
+
+  </div>
+</section>
+
     </article>
   );
 }

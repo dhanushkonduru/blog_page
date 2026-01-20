@@ -12,7 +12,7 @@ export default function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="mx-auto flex min-h-screen max-w-7xl">
+      <div className="flex min-h-screen w-full">
         <aside className="hidden w-64 flex-col border-r border-gray-200 bg-white px-6 py-10 md:flex">
           <Link to="/admin" className="text-lg font-semibold text-gray-900">
             Admin Panel

@@ -83,7 +83,7 @@ export default function Home() {
   };
 
   return (
-    <section className="page-fade">
+    <section className="page-fade pt-8 px-4 sm:px-6 lg:px-8 xl:px-10">
       <div className="flex flex-col gap-4">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">
           Premium Insights
@@ -129,14 +129,14 @@ export default function Home() {
 
       {!loading && !error && blogs.length === 0 && (
         <div className="mt-12 rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm text-gray-500">
-          No blogs yet. Check back soon for fresh stories.
+          No stories yet — new insights are on the way.
         </div>
       )}
 
       {!loading && !error && featuredBlog && (
         <div className="mt-12 grid gap-8 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm lg:grid-cols-[1.2fr_1fr] lg:items-center">
           <Link to={`/blog/${featuredBlog.slug}`} className="group block">
-            <div className="aspect-video overflow-hidden rounded-2xl border border-gray-200 bg-gray-100">
+            <div className="aspect-video overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 relative">
               <img
                 src={featuredBlog.coverImage}
                 alt={featuredBlog.title}

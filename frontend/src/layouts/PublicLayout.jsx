@@ -5,28 +5,75 @@ export default function PublicLayout() {
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <Navbar />
-      <main className="mx-auto w-full max-w-7xl px-6 py-12">
-        <Outlet />
-      </main>
-      <footer className="border-t border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-10 text-sm text-gray-500 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-semibold text-gray-900">Lumina Blog</p>
-            <p>Premium minimal publishing for modern teams.</p>
-          </div>
-          <div className="flex items-center gap-6 text-xs uppercase tracking-wide text-gray-500">
-            <Link to="/" className="transition hover:text-gray-900">
-              Privacy
-            </Link>
-            <Link to="/" className="transition hover:text-gray-900">
-              Terms
-            </Link>
-            <Link to="/" className="transition hover:text-gray-900">
-              Support
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <main className="w-full">
+  <Outlet />
+</main>
+
+      <footer className="bg-white text-gray-700 border-t border-gray-200">
+  {/* Top section */}
+  <div className="w-full px-4 py-16 sm:px-6 lg:px-8 xl:px-10">
+    <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
+
+      {/* Brand */}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Blog Speed
+        </h3>
+        <p className="mt-3 max-w-xs text-sm leading-relaxed text-gray-600">
+          A modern publishing platform focused on clarity, calm,
+          and high-quality reading experiences.
+        </p>
+      </div>
+
+      {/* Product */}
+      <div>
+        <p className="text-sm font-semibold text-gray-900">
+          Product
+        </p>
+        <ul className="mt-4 space-y-3 text-sm">
+          <li><a href="/" className="transition hover:text-gray-900">Home</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Blog</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Categories</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Featured</a></li>
+        </ul>
+      </div>
+
+      {/* Resources */}
+      <div>
+        <p className="text-sm font-semibold text-gray-900">
+          Resources
+        </p>
+        <ul className="mt-4 space-y-3 text-sm">
+          <li><a href="/" className="transition hover:text-gray-900">Guides</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Writing Tips</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Design Systems</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Engineering</a></li>
+        </ul>
+      </div>
+
+      {/* Legal */}
+      <div>
+        <p className="text-sm font-semibold text-gray-900">
+          Legal
+        </p>
+        <ul className="mt-4 space-y-3 text-sm">
+          <li><a href="/" className="transition hover:text-gray-900">Privacy Policy</a></li>
+          <li><a href="/" className="transition hover:text-gray-900">Terms & Conditions</a></li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  {/* Bottom bar */}
+  <div className="border-t border-gray-200">
+    <div className="w-full px-4 py-6 text-center text-xs text-gray-500 sm:px-6 lg:px-8 xl:px-10">
+      © 2025 Blog Speed. Built for focused reading.
+    </div>
+  </div>
+</footer>
+
+
     </div>
   );
 }

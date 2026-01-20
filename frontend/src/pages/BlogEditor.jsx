@@ -22,6 +22,9 @@ export default function BlogEditor() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+const [successMessage, setSuccessMessage] = useState("");
+
 
   useEffect(() => {
     if (!id) return;
@@ -59,27 +62,59 @@ export default function BlogEditor() {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
+  const validateForm = () => {
+  if (
+    !form.title.trim() ||
+    !form.category.trim() ||
+    !form.author.trim() ||
+    !form.coverImage.trim() ||
+    !form.excerpt.trim() ||
+    !form.content.trim()
+  ) {
+    setError("Please fill out all required fields before saving.");
+    return false;
+  }
+  return true;
+};
+
 
   const saveBlog = async (statusOverride) => {
-    setSaving(true);
-    setError("");
-    try {
-      const payload = {
-        ...form,
-        status: statusOverride || form.status
-      };
-      if (id) {
-        await api.put(`/admin/blogs/${id}`, payload);
-      } else {
-        await api.post("/admin/blogs", payload);
-      }
-      navigate("/admin");
-    } catch (err) {
-      setError("Unable to save blog.");
-    } finally {
-      setSaving(false);
+  setError("");
+
+  // 🚫 STOP if required fields are missing
+  if (!validateForm()) return;
+
+  setSaving(true);
+
+  try {
+    const payload = {
+      ...form,
+      status: statusOverride || form.status
+    };
+
+    if (id) {
+      await api.put(`/admin/blogs/${id}`, payload);
+    } else {
+      await api.post("/admin/blogs", payload);
     }
-  };
+
+    setSuccessMessage(
+  statusOverride === "Published"
+    ? "Blog published successfully."
+    : "Draft saved successfully."
+);
+
+setTimeout(() => {
+  navigate("/admin");
+}, 1200);
+
+  } catch {
+    setError("Unable to save blog. Please try again.");
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -102,7 +137,11 @@ export default function BlogEditor() {
       <h1 className="text-2xl font-semibold text-gray-900">
         {id ? "Edit Blog" : "New Blog"}
       </h1>
-      <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+      <form onSubmit={handleSubmit} className="mt-8 space-y-10">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-4">
+  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+    Basic Information
+  </p>
         <Input
           label="Title"
           name="title"
@@ -128,6 +167,7 @@ export default function BlogEditor() {
             onChange={handleChange}
             required
           />
+          </div>
           <Input
             label="Cover Image URL"
             name="coverImage"
@@ -136,6 +176,17 @@ export default function BlogEditor() {
             onChange={handleChange}
             required
           />
+          {form.coverImage && (
+  <div className="mt-3 overflow-hidden rounded-xl border border-gray-200">
+    <img
+      src={form.coverImage}
+      alt="Cover preview"
+      className="h-48 w-full object-cover"
+      onError={(e) => (e.currentTarget.style.display = "none")}
+    />
+  </div>
+)}
+
         </div>
         <datalist id="category-options">
           <option value="Design" />
@@ -155,6 +206,18 @@ export default function BlogEditor() {
           onChange={handleChange}
           helper="Keep it under 160 characters for best results."
         />
+        <p
+  className={`text-xs ${
+    form.excerpt.length > 160
+      ? "text-red-600"
+      : form.excerpt.length > 140
+      ? "text-yellow-600"
+      : "text-gray-500"
+  }`}
+>
+  {form.excerpt.length} / 160 characters
+</p>
+
         <Button type="button" variant="secondary" size="sm" onClick={handleAutoExcerpt}>
           Auto-generate excerpt
         </Button>
@@ -197,7 +260,11 @@ export default function BlogEditor() {
           </button>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    {error}
+  </div>
+)}
         <div className="flex flex-wrap gap-3">
           <Button
             type="button"
@@ -207,9 +274,14 @@ export default function BlogEditor() {
           >
             {saving ? "Saving..." : "Save Draft"}
           </Button>
-          <Button type="button" onClick={() => saveBlog("Published")} disabled={saving}>
-            Publish
-          </Button>
+          <Button
+  type="button"
+  onClick={() => setShowPublishConfirm(true)}
+  disabled={saving}
+>
+  Publish
+</Button>
+
           <Button
             type="button"
             variant="ghost"
@@ -219,6 +291,43 @@ export default function BlogEditor() {
           </Button>
         </div>
       </form>
+      {showPublishConfirm && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <h3 className="text-lg font-semibold text-gray-900">
+        Publish this blog?
+      </h3>
+      <p className="mt-2 text-sm text-gray-600">
+        This blog will be visible to all readers.
+      </p>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <Button
+          variant="ghost"
+          onClick={() => setShowPublishConfirm(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={() => {
+            setShowPublishConfirm(false);
+            saveBlog("Published");
+          }}
+        >
+          Publish
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
+{successMessage && (
+  <div className="fixed bottom-6 right-6 z-50">
+    <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-3 text-sm font-medium text-green-700 shadow-md">
+      {successMessage}
+    </div>
+  </div>
+)}
+
     </section>
   );
 }
