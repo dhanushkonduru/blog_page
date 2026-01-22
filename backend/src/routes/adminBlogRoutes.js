@@ -1,6 +1,6 @@
 import express from "express";
 import { body } from "express-validator";
-import { generateSeoIdeas } from "../controllers/seoController.js";
+
 
 import {
   listBlogs,
@@ -27,12 +27,15 @@ const blogRules = [
 
 router.use(protect);
 
+
+
+// CRUD routes
 router.get("/", listBlogs);
-router.get("/:id", getBlog);
 router.post("/", blogRules, validate, createBlog);
+
+router.get("/:id", getBlog);
 router.put("/:id", blogRules, validate, updateBlog);
 router.delete("/:id", deleteBlog);
-router.post("/ai/seo", generateSeoIdeas);
-
 
 export default router;
+

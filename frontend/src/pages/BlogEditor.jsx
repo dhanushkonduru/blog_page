@@ -147,7 +147,7 @@ const handleGenerateSeo = async (regenerate = false) => {
         : ""
     });
 
-    setSeoData(res.data);
+    setSeoData(res.data.data);
   } catch (err) {
     console.error(err);
   } finally {
@@ -155,6 +155,16 @@ const handleGenerateSeo = async (regenerate = false) => {
   }
 };
 
+const parseSeoText = (text) => {
+  const titleMatch = text.match(/SEO Title.*?\n"(.*?)"/s);
+  const metaMatch = text.match(/Meta Description.*?\n(.*)/s);
+
+  return {
+    title: titleMatch ? titleMatch[1] : "",
+    meta: metaMatch ? metaMatch[1].split("\n")[0] : "",
+    raw: text
+  };
+};
 
   const isPublished = form.status === "Published";
 
@@ -398,36 +408,79 @@ const handleGenerateSeo = async (regenerate = false) => {
       </div>
 
       {seoData && (
-        <>
-          <div>
-            <p className="font-medium">SEO Titles</p>
-            <ul className="mt-2 space-y-2">
-              {seoData.titles.map((t, i) => (
-                <li
-                  key={i}
-                  className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-gray-50"
-                  onClick={() => {
-                    setForm((prev) => ({ ...prev, title: t }));
-                    setShowSeoModal(false);
-                  }}
-                >
-                  {t}
-                </li>
-              ))}
-            </ul>
-          </div>
+  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+    <p className="font-medium mb-2">AI Generated SEO</p>
 
-          <div>
-            <p className="font-medium">SEO Keywords</p>
-            <p className="text-sm mt-1">
-              <b>Primary:</b> {seoData.keywords.primary}
-            </p>
-            <p className="text-sm">
-              <b>Secondary:</b> {seoData.keywords.secondary.join(", ")}
-            </p>
+    {seoData && (() => {
+  const parsed = parseSeoText(seoData);
+
+  return (
+    <div className="space-y-5">
+
+      {/* SEO TITLE */}
+      {parsed.title && (
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-sm font-semibold text-gray-700 mb-2">
+            Suggested SEO Title
+          </p>
+          <div
+            className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-gray-50"
+            onClick={() => {
+              setForm((prev) => ({ ...prev, title: parsed.title }));
+              setShowSeoModal(false);
+            }}
+          >
+            {parsed.title}
           </div>
-        </>
+        </div>
       )}
+
+      {/* META DESCRIPTION */}
+      {parsed.meta && (
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-sm font-semibold text-gray-700 mb-2">
+            Meta Description
+          </p>
+          <p className="text-sm text-gray-600">
+            {parsed.meta}
+          </p>
+        </div>
+      )}
+
+      {/* RAW DETAILS (COLLAPSIBLE) */}
+      <details className="rounded-xl border bg-gray-50 p-4">
+        <summary className="cursor-pointer text-sm font-medium text-gray-700">
+          View full AI analysis
+        </summary>
+        <pre className="mt-3 whitespace-pre-wrap text-xs text-gray-700">
+          {parsed.raw}
+        </pre>
+      </details>
+
+    </div>
+  );
+})()}
+
+
+    <div className="mt-3 flex justify-end">
+      <Button
+        size="sm"
+        onClick={() => {
+          // Optional: auto-fill title from first line
+          const firstLine = seoData.split("\n")[0];
+          setForm((prev) => ({
+            ...prev,
+            title: firstLine.replace("SEO Title:", "").trim()
+          }));
+          setShowSeoModal(false);
+        }}
+      >
+        Use Title
+      </Button>
+    </div>
+  </div>
+)}
+
     </div>
   </div>
 )}
