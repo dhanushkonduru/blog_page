@@ -119,7 +119,11 @@ Return ONLY valid JSON array, no markdown, no code blocks, no explanations.`;
       }
     }
 
-    return res.status(error.response?.status || 500).json({
+    // Always return 500 for OpenRouter API errors (not 401) to prevent logout
+    // 401 should only be used for our own authentication failures
+    const statusCode = error.response?.status === 401 ? 500 : (error.response?.status || 500);
+    
+    return res.status(statusCode).json({
       success: false,
       message: errorMessage,
       error: errorDetails,
@@ -249,7 +253,11 @@ Original input: ${originalInput || "N/A"}`;
       }
     }
 
-    return res.status(error.response?.status || 500).json({
+    // Always return 500 for OpenRouter API errors (not 401) to prevent logout
+    // 401 should only be used for our own authentication failures
+    const statusCode = error.response?.status === 401 ? 500 : (error.response?.status || 500);
+    
+    return res.status(statusCode).json({
       success: false,
       message: errorMessage,
       error: errorDetails,

@@ -22,7 +22,7 @@ const blogRules = [
   body("status").optional().isIn(["Published", "Draft"]).withMessage("Invalid status"),
   body("coverImage").notEmpty().withMessage("Cover image required"),
   body("coverImage").isURL().withMessage("Cover image must be a URL"),
-  body("excerpt").optional().isLength({ max: 200 }).withMessage("Excerpt too long")
+  body("excerpt").optional().isLength({ max: 300 }).withMessage("Excerpt too long (max 300 characters)")
 ];
 
 router.use(protect);

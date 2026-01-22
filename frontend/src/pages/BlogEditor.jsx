@@ -30,6 +30,7 @@ const [showSeoModal, setShowSeoModal] = useState(false);
 const [seoLoading, setSeoLoading] = useState(false);
 const [seoContentLoadingIndex, setSeoContentLoadingIndex] = useState(null);
 const [seoError, setSeoError] = useState("");
+const [regeneratingContent, setRegeneratingContent] = useState(false);
 
 
 
@@ -115,8 +116,14 @@ setTimeout(() => {
   navigate("/admin");
 }, 1200);
 
-  } catch {
-    setError("Unable to save blog. Please try again.");
+  } catch (err) {
+    console.error("Save Blog Error:", err);
+    if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+      const errorMessages = err.response.data.errors.map(e => `${e.field}: ${e.message}`).join(", ");
+      setError(`Validation error: ${errorMessages}`);
+    } else {
+      setError(err.response?.data?.message || "Unable to save blog. Please try again.");
+    }
   } finally {
     setSaving(false);
   }
@@ -185,6 +192,55 @@ const handleGenerateContent = async (item, index) => {
     setSeoError(errorMsg);
   } finally {
     setSeoContentLoadingIndex(null);
+  }
+};
+
+const handleRegenerateContentDirectly = async () => {
+  if (!form.title.trim()) {
+    setError("Please enter a title first.");
+    return;
+  }
+
+  setRegeneratingContent(true);
+  setError("");
+
+  try {
+    // First, get SEO keywords for the current title
+    const titlesRes = await api.post("/admin/blogs/ai/titles", {
+      input: form.title
+    });
+
+    if (!titlesRes.data.success || !Array.isArray(titlesRes.data.data) || titlesRes.data.data.length === 0) {
+      throw new Error("Unable to generate SEO keywords for the title.");
+    }
+
+    // Use the first result's keywords but keep the existing title
+    const firstResult = titlesRes.data.data[0];
+    
+    // Generate content using the EXISTING title (not the new one) and keywords
+    const contentRes = await api.post("/admin/blogs/ai/content", {
+      title: form.title, // Use the existing title, not firstResult.title
+      keywords: firstResult.keywords,
+      originalInput: form.title
+    });
+
+    const payload = contentRes.data?.data;
+    if (payload?.excerpt && payload?.content) {
+      setForm((prev) => ({
+        ...prev,
+        // Keep the existing title, only update excerpt and content
+        excerpt: payload.excerpt,
+        content: payload.content
+      }));
+      setSuccessMessage("Content regenerated successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    }
+  } catch (err) {
+    console.error("Direct Content Generation Error:", err);
+    const errorMsg = err.response?.data?.message || err.message || "Unable to regenerate content. Please try again.";
+    setError(errorMsg);
+  } finally {
+    setRegeneratingContent(false);
   }
 };
 
@@ -299,6 +355,18 @@ const handleGenerateContent = async (item, index) => {
           onChange={handleChange}
           required
         />
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleRegenerateContentDirectly}
+            disabled={regeneratingContent || !form.title.trim()}
+          >
+            {regeneratingContent ? "Generating..." : "Regenerate Content (AI)"}
+          </Button>
+        </div>
 
         <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-4">
           <div>
