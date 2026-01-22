@@ -260,7 +260,7 @@ const handleRegenerateContentDirectly = async () => {
     variant="secondary"
     onClick={() => setShowSeoModal(true)}
   >
-    Generate SEO (AI)
+    Generate SEO
   </Button>
 </div>
 
@@ -364,7 +364,7 @@ const handleRegenerateContentDirectly = async () => {
             onClick={handleRegenerateContentDirectly}
             disabled={regeneratingContent || !form.title.trim()}
           >
-            {regeneratingContent ? "Generating..." : "Regenerate Content (AI)"}
+            {regeneratingContent ? "Generating..." : "Regenerate Content"}
           </Button>
         </div>
 
