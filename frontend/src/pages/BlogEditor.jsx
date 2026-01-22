@@ -25,9 +25,11 @@ export default function BlogEditor() {
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 const [successMessage, setSuccessMessage] = useState("");
 const [seoInput, setSeoInput] = useState("");
-const [seoData, setSeoData] = useState(null);
+const [seoResults, setSeoResults] = useState([]);
 const [showSeoModal, setShowSeoModal] = useState(false);
 const [seoLoading, setSeoLoading] = useState(false);
+const [seoContentLoadingIndex, setSeoContentLoadingIndex] = useState(null);
+const [seoError, setSeoError] = useState("");
 
 
 
@@ -126,44 +128,64 @@ setTimeout(() => {
     saveBlog();
   };
 
-  const handleAutoExcerpt = () => {
-  setForm((prev) => ({
-    ...prev,
-    excerpt: (prev.content || "").slice(0, 160)
-  }));
-};
 
 /* 🔽 ADD THIS FUNCTION HERE 🔽 */
 const handleGenerateSeo = async (regenerate = false) => {
   if (!seoInput.trim()) return;
 
   setSeoLoading(true);
+  setSeoError("");
 
   try {
-    const res = await api.post("/admin/blogs/ai/seo", {
-      input: seoInput,
-      regenerateHint: regenerate
-        ? "Generate more creative and higher CTR titles"
-        : ""
+    const res = await api.post("/admin/blogs/ai/titles", {
+      input: regenerate
+        ? `${seoInput}\n\nGenerate more creative and higher CTR titles.`
+        : seoInput
     });
 
-    setSeoData(res.data.data);
+    if (!res.data.success || !Array.isArray(res.data.data)) {
+      throw new Error(res.data.message || "Invalid response from server");
+    }
+    setSeoResults(res.data.data);
   } catch (err) {
-    console.error(err);
+    console.error("SEO Generation Error:", err);
+    const errorMsg = err.response?.data?.message || err.message || "Unable to generate SEO titles. Please try again.";
+    setSeoError(errorMsg);
   } finally {
     setSeoLoading(false);
   }
 };
 
-const parseSeoText = (text) => {
-  const titleMatch = text.match(/SEO Title.*?\n"(.*?)"/s);
-  const metaMatch = text.match(/Meta Description.*?\n(.*)/s);
+const handleGenerateContent = async (item, index) => {
+  if (!item?.title || !Array.isArray(item?.keywords)) return;
 
-  return {
-    title: titleMatch ? titleMatch[1] : "",
-    meta: metaMatch ? metaMatch[1].split("\n")[0] : "",
-    raw: text
-  };
+  setSeoContentLoadingIndex(index);
+  setSeoError("");
+
+  try {
+    const res = await api.post("/admin/blogs/ai/content", {
+      title: item.title,
+      keywords: item.keywords,
+      originalInput: seoInput
+    });
+
+    const payload = res.data?.data;
+    if (payload?.title && payload?.excerpt && payload?.content) {
+      setForm((prev) => ({
+        ...prev,
+        title: payload.title,
+        excerpt: payload.excerpt,
+        content: payload.content
+      }));
+      setShowSeoModal(false);
+    }
+  } catch (err) {
+    console.error("Content Generation Error:", err);
+    const errorMsg = err.response?.data?.message || err.message || "Unable to generate blog content. Please try again.";
+    setSeoError(errorMsg);
+  } finally {
+    setSeoContentLoadingIndex(null);
+  }
 };
 
   const isPublished = form.status === "Published";
@@ -266,10 +288,6 @@ const parseSeoText = (text) => {
 >
   {form.excerpt.length} / 160 characters
 </p>
-
-        <Button type="button" variant="secondary" size="sm" onClick={handleAutoExcerpt}>
-          Auto-generate excerpt
-        </Button>
 
         <Input
           label="Content (Markdown)"
@@ -393,7 +411,7 @@ const parseSeoText = (text) => {
           {seoLoading ? "Generating..." : "Generate"}
         </Button>
 
-        {seoData && (
+        {seoResults.length > 0 && (
           <Button
             variant="secondary"
             onClick={() => handleGenerateSeo(true)}
@@ -407,76 +425,39 @@ const parseSeoText = (text) => {
         </Button>
       </div>
 
-      {seoData && (
+      {seoError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {seoError}
+        </div>
+      )}
+
+      {seoResults.length > 0 && (
   <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
     <p className="font-medium mb-2">AI Generated SEO</p>
 
-    {seoData && (() => {
-  const parsed = parseSeoText(seoData);
-
-  return (
-    <div className="space-y-5">
-
-      {/* SEO TITLE */}
-      {parsed.title && (
-        <div className="rounded-xl border bg-white p-4">
+    <div className="space-y-4">
+      {seoResults.map((item, index) => (
+        <div key={`${item.title}-${index}`} className="rounded-xl border bg-white p-4">
           <p className="text-sm font-semibold text-gray-700 mb-2">
-            Suggested SEO Title
+            Option {index + 1}
           </p>
-          <div
-            className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-gray-50"
-            onClick={() => {
-              setForm((prev) => ({ ...prev, title: parsed.title }));
-              setShowSeoModal(false);
-            }}
-          >
-            {parsed.title}
+          <p className="text-base font-medium text-gray-900">{item.title}</p>
+          {Array.isArray(item.keywords) && item.keywords.length > 0 && (
+            <p className="mt-2 text-xs text-gray-600">
+              Keywords: {item.keywords.join(", ")}
+            </p>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => handleGenerateContent(item, index)}
+              disabled={seoContentLoadingIndex !== null}
+            >
+              {seoContentLoadingIndex === index ? "Generating..." : "Generate Content"}
+            </Button>
           </div>
         </div>
-      )}
-
-      {/* META DESCRIPTION */}
-      {parsed.meta && (
-        <div className="rounded-xl border bg-white p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-2">
-            Meta Description
-          </p>
-          <p className="text-sm text-gray-600">
-            {parsed.meta}
-          </p>
-        </div>
-      )}
-
-      {/* RAW DETAILS (COLLAPSIBLE) */}
-      <details className="rounded-xl border bg-gray-50 p-4">
-        <summary className="cursor-pointer text-sm font-medium text-gray-700">
-          View full AI analysis
-        </summary>
-        <pre className="mt-3 whitespace-pre-wrap text-xs text-gray-700">
-          {parsed.raw}
-        </pre>
-      </details>
-
-    </div>
-  );
-})()}
-
-
-    <div className="mt-3 flex justify-end">
-      <Button
-        size="sm"
-        onClick={() => {
-          // Optional: auto-fill title from first line
-          const firstLine = seoData.split("\n")[0];
-          setForm((prev) => ({
-            ...prev,
-            title: firstLine.replace("SEO Title:", "").trim()
-          }));
-          setShowSeoModal(false);
-        }}
-      >
-        Use Title
-      </Button>
+      ))}
     </div>
   </div>
 )}
