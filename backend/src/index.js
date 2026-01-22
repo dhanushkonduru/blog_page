@@ -1,9 +1,15 @@
 import dotenv from "dotenv";
+dotenv.config();
 import mongoose from "mongoose";
 import app from "./app.js";
 import Admin from "./models/Admin.js";
 
-dotenv.config();
+console.log("ENV LOADED:", !!process.env.GEMINI_API_KEY);
+console.log("🔍 ENV CHECK");
+console.log("GEMINI_API_KEY =", process.env.GEMINI_API_KEY);
+console.log("GOOGLE_APPLICATION_CREDENTIALS =", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+console.log("NODE ENV =", process.env.NODE_ENV);
+console.log("--------------");
 
 const PORT = process.env.PORT || 5000;
 

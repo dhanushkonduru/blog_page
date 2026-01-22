@@ -24,6 +24,11 @@ export default function BlogEditor() {
   const [error, setError] = useState("");
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 const [successMessage, setSuccessMessage] = useState("");
+const [seoInput, setSeoInput] = useState("");
+const [seoData, setSeoData] = useState(null);
+const [showSeoModal, setShowSeoModal] = useState(false);
+const [seoLoading, setSeoLoading] = useState(false);
+
 
 
   useEffect(() => {
@@ -122,11 +127,34 @@ setTimeout(() => {
   };
 
   const handleAutoExcerpt = () => {
-    setForm((prev) => ({
-      ...prev,
-      excerpt: (prev.content || "").slice(0, 160)
-    }));
-  };
+  setForm((prev) => ({
+    ...prev,
+    excerpt: (prev.content || "").slice(0, 160)
+  }));
+};
+
+/* 🔽 ADD THIS FUNCTION HERE 🔽 */
+const handleGenerateSeo = async (regenerate = false) => {
+  if (!seoInput.trim()) return;
+
+  setSeoLoading(true);
+
+  try {
+    const res = await api.post("/admin/blogs/ai/seo", {
+      input: seoInput,
+      regenerateHint: regenerate
+        ? "Generate more creative and higher CTR titles"
+        : ""
+    });
+
+    setSeoData(res.data);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setSeoLoading(false);
+  }
+};
+
 
   const isPublished = form.status === "Published";
 
@@ -134,9 +162,20 @@ setTimeout(() => {
 
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-gray-900">
-        {id ? "Edit Blog" : "New Blog"}
-      </h1>
+      <div className="flex items-center justify-between">
+  <h1 className="text-2xl font-semibold text-gray-900">
+    {id ? "Edit Blog" : "New Blog"}
+  </h1>
+
+  <Button
+    size="sm"
+    variant="secondary"
+    onClick={() => setShowSeoModal(true)}
+  >
+    Generate SEO (AI)
+  </Button>
+</div>
+
       <form onSubmit={handleSubmit} className="mt-8 space-y-10">
         <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-4">
   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -324,6 +363,71 @@ setTimeout(() => {
   <div className="fixed bottom-6 right-6 z-50">
     <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-3 text-sm font-medium text-green-700 shadow-md">
       {successMessage}
+    </div>
+  </div>
+)}
+{showSeoModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="w-full max-w-xl rounded-2xl bg-white p-6 space-y-4">
+      <h3 className="text-lg font-semibold">AI SEO Generator</h3>
+
+      <Input
+        label="Keyword / Idea / Rough Title"
+        value={seoInput}
+        onChange={(e) => setSeoInput(e.target.value)}
+        placeholder="e.g. product onboarding"
+      />
+
+      <div className="flex gap-2">
+        <Button onClick={() => handleGenerateSeo()} disabled={seoLoading}>
+          {seoLoading ? "Generating..." : "Generate"}
+        </Button>
+
+        {seoData && (
+          <Button
+            variant="secondary"
+            onClick={() => handleGenerateSeo(true)}
+          >
+            Regenerate
+          </Button>
+        )}
+
+        <Button variant="ghost" onClick={() => setShowSeoModal(false)}>
+          Close
+        </Button>
+      </div>
+
+      {seoData && (
+        <>
+          <div>
+            <p className="font-medium">SEO Titles</p>
+            <ul className="mt-2 space-y-2">
+              {seoData.titles.map((t, i) => (
+                <li
+                  key={i}
+                  className="cursor-pointer rounded-lg border px-3 py-2 hover:bg-gray-50"
+                  onClick={() => {
+                    setForm((prev) => ({ ...prev, title: t }));
+                    setShowSeoModal(false);
+                  }}
+                >
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p className="font-medium">SEO Keywords</p>
+            <p className="text-sm mt-1">
+              <b>Primary:</b> {seoData.keywords.primary}
+            </p>
+            <p className="text-sm">
+              <b>Secondary:</b> {seoData.keywords.secondary.join(", ")}
+            </p>
+          </div>
+        </>
+      )}
     </div>
   </div>
 )}

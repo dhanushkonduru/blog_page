@@ -9,6 +9,9 @@ import adminBlogRoutes from "./routes/adminBlogRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
+app.get("/ping", (req, res) => {
+  res.json({ status: "ok" });
+});
 
 app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
 app.use(helmet());
