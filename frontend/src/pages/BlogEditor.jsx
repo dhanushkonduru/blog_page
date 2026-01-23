@@ -31,8 +31,25 @@ const [seoLoading, setSeoLoading] = useState(false);
 const [seoContentLoadingIndex, setSeoContentLoadingIndex] = useState(null);
 const [seoError, setSeoError] = useState("");
 const [regeneratingContent, setRegeneratingContent] = useState(false);
+const [generatingContent, setGeneratingContent] = useState(false);
+// New SEO state
+const [seoTitles, setSeoTitles] = useState([]);
+const [seoMetaDescriptions, setSeoMetaDescriptions] = useState([]);
+const [seoSlug, setSeoSlug] = useState("");
+const [seoKeyphrases, setSeoKeyphrases] = useState({ primary: "", secondary: [] });
+const [seoSerpInsights, setSeoSerpInsights] = useState(null);
+const [seoMode, setSeoMode] = useState("all"); 
+// "title" | "meta" | "keyphrase" | "all"
 
-
+  // WordPress-style slug generation
+  function generateSlug(text) {
+    if (!text) return "";
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -42,8 +59,9 @@ const [regeneratingContent, setRegeneratingContent] = useState(false);
       .get(`/admin/blogs/${id}`)
       .then((res) => {
         if (!isMounted) return;
+        const title = res.data.title || "";
         setForm({
-          title: res.data.title || "",
+          title,
           content: res.data.content || "",
           excerpt: res.data.excerpt || "",
           coverImage: res.data.coverImage || "",
@@ -51,6 +69,8 @@ const [regeneratingContent, setRegeneratingContent] = useState(false);
           author: res.data.author || "",
           status: res.data.status || "Draft"
         });
+        // Initialize slug from existing blog or generate from title
+        setSeoSlug(res.data.slug || generateSlug(title));
       })
       .catch(() => {
         if (!isMounted) return;
@@ -69,6 +89,11 @@ const [regeneratingContent, setRegeneratingContent] = useState(false);
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    
+    // Auto-generate slug when title changes
+    if (name === "title") {
+      setSeoSlug(generateSlug(value));
+    }
   };
   const validateForm = () => {
   if (
@@ -86,6 +111,29 @@ const [regeneratingContent, setRegeneratingContent] = useState(false);
 };
 
 
+  // Auto-generate SEO if missing
+  const autoGenerateSeoFromTitle = async (title) => {
+    if (!title || !title.trim()) return null;
+
+    try {
+      const res = await api.post("/admin/blogs/ai/titles", {
+        input: title
+      });
+
+      if (res.data.success && res.data.titles && res.data.metaDescriptions) {
+        return {
+          metaDescription: res.data.metaDescriptions[0] || null,
+          keyphrases: res.data.keyphrases || null,
+          slug: res.data.slug || null
+        };
+      }
+    } catch (err) {
+      console.error("Auto-SEO generation failed:", err);
+      // Don't throw - this is optional
+    }
+    return null;
+  };
+
   const saveBlog = async (statusOverride) => {
   setError("");
 
@@ -95,10 +143,40 @@ const [regeneratingContent, setRegeneratingContent] = useState(false);
   setSaving(true);
 
   try {
+    let updatedExcerpt = form.excerpt;
+    let updatedSlug = seoSlug || generateSlug(form.title);
+    let updatedKeyphrases = seoKeyphrases;
+
+    // Auto-generate SEO if meta description or keyphrases are missing
+    if (!form.excerpt || !seoKeyphrases?.primary) {
+      const seoData = await autoGenerateSeoFromTitle(form.title);
+      if (seoData) {
+        if (seoData.metaDescription && !form.excerpt) {
+          updatedExcerpt = seoData.metaDescription;
+          setForm((prev) => ({ ...prev, excerpt: seoData.metaDescription }));
+        }
+        if (seoData.slug) {
+          updatedSlug = seoData.slug;
+          setSeoSlug(seoData.slug);
+        }
+        if (seoData.keyphrases) {
+          updatedKeyphrases = seoData.keyphrases;
+          setSeoKeyphrases(seoData.keyphrases);
+        }
+      }
+    }
+
     const payload = {
-      ...form,
-      status: statusOverride || form.status
-    };
+  ...form,
+  excerpt: updatedExcerpt,
+  status: statusOverride || form.status,
+  slug: updatedSlug,
+
+  // ✅ SEO fields (mapped to backend schema)
+  primaryKeyphrase: updatedKeyphrases?.primary || "",
+  secondaryKeyphrases: updatedKeyphrases?.secondary || []
+};
+
 
     if (id) {
       await api.put(`/admin/blogs/${id}`, payload);
@@ -150,10 +228,25 @@ const handleGenerateSeo = async (regenerate = false) => {
         : seoInput
     });
 
-    if (!res.data.success || !Array.isArray(res.data.data)) {
+    if (!res.data.success) {
       throw new Error(res.data.message || "Invalid response from server");
     }
-    setSeoResults(res.data.data);
+
+    // Handle new response format
+    if (res.data.titles && res.data.metaDescriptions) {
+      setSeoTitles(res.data.titles);
+      setSeoMetaDescriptions(res.data.metaDescriptions);
+      setSeoSlug(res.data.slug || "");
+      setSeoKeyphrases(res.data.keyphrases || { primary: "", secondary: [] });
+      setSeoSerpInsights(res.data.serpInsights || null);
+      // Also set legacy format for backward compatibility
+      setSeoResults(res.data.data || []);
+    } else if (Array.isArray(res.data.data)) {
+      // Fallback to old format
+      setSeoResults(res.data.data);
+    } else {
+      throw new Error("Invalid response format from server");
+    }
   } catch (err) {
     console.error("SEO Generation Error:", err);
     const errorMsg = err.response?.data?.message || err.message || "Unable to generate SEO titles. Please try again.";
@@ -161,6 +254,17 @@ const handleGenerateSeo = async (regenerate = false) => {
   } finally {
     setSeoLoading(false);
   }
+};
+
+// Handler for selecting a title
+const handleSelectTitle = (title) => {
+  setForm((prev) => ({ ...prev, title }));
+  setSeoSlug(generateSlug(title));
+};
+
+// Handler for selecting a meta description
+const handleSelectMetaDescription = (metaDescription) => {
+  setForm((prev) => ({ ...prev, excerpt: metaDescription }));
 };
 
 const handleGenerateContent = async (item, index) => {
@@ -184,6 +288,7 @@ const handleGenerateContent = async (item, index) => {
         excerpt: payload.excerpt,
         content: payload.content
       }));
+      setSeoSlug(generateSlug(payload.title));
       setShowSeoModal(false);
     }
   } catch (err) {
@@ -192,6 +297,42 @@ const handleGenerateContent = async (item, index) => {
     setSeoError(errorMsg);
   } finally {
     setSeoContentLoadingIndex(null);
+  }
+};
+
+const handleGenerateContentFromTitle = async () => {
+  if (!form.title.trim()) {
+    return;
+  }
+
+  setGeneratingContent(true);
+  setError("");
+
+  try {
+    // Use existing keyphrases if available, otherwise use title as keyword
+    const keywords = seoKeyphrases?.primary 
+      ? [seoKeyphrases.primary, ...(seoKeyphrases.secondary || [])]
+      : [form.title];
+    
+    const contentRes = await api.post("/admin/blogs/ai/content", {
+      title: form.title,
+      keywords: keywords,
+      originalInput: form.title
+    });
+
+    const generatedContent = contentRes.data?.data?.content;
+    if (generatedContent) {
+      setForm((prev) => ({
+        ...prev,
+        content: generatedContent
+      }));
+    }
+  } catch (err) {
+    console.error("Content Generation Error:", err);
+    const errorMsg = err.response?.data?.message || err.message || "Unable to generate content. Please try again.";
+    setError(errorMsg);
+  } finally {
+    setGeneratingContent(false);
   }
 };
 
@@ -255,13 +396,8 @@ const handleRegenerateContentDirectly = async () => {
     {id ? "Edit Blog" : "New Blog"}
   </h1>
 
-  <Button
-    size="sm"
-    variant="secondary"
-    onClick={() => setShowSeoModal(true)}
-  >
-    Generate SEO
-  </Button>
+  
+
 </div>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-10">
@@ -269,13 +405,37 @@ const handleRegenerateContentDirectly = async () => {
   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
     Basic Information
   </p>
-        <Input
-          label="Title"
-          name="title"
-          value={form.title}
-          onChange={handleChange}
-          required
-        />
+        <div className="space-y-1">
+  {/* Label row */}
+  <div className="flex items-center justify-between">
+    <label className="text-sm font-medium text-gray-700">
+      Title
+    </label>
+
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSeoMode("title");
+        setShowSeoModal(true);
+      }}
+    >
+      Generate SEO Title
+    </Button>
+  </div>
+
+  {/* Input */}
+  <input
+    type="text"
+    name="title"
+    value={form.title}
+    onChange={handleChange}
+    required
+    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+</div>
+
+
         <div className="grid gap-4 md:grid-cols-2">
           <Input
             label="Category"
@@ -324,15 +484,39 @@ const handleRegenerateContentDirectly = async () => {
           <option value="Research" />
         </datalist>
 
-        <Input
-          label="Excerpt"
-          name="excerpt"
-          as="textarea"
-          rows="3"
-          value={form.excerpt}
-          onChange={handleChange}
-          helper="Keep it under 160 characters for best results."
-        />
+        <div className="space-y-1">
+  {/* Label row */}
+  <div className="flex items-center justify-between">
+    <label className="text-sm font-medium text-gray-700">
+      Meta Description
+    </label>
+
+    <Button
+      size="sm"
+      variant="secondary"
+      onClick={() => {
+        setSeoMode("meta");
+        setShowSeoModal(true);
+      }}
+    >
+      Generate Meta Description
+    </Button>
+  </div>
+
+  {/* Textarea */}
+  <textarea
+    name="excerpt"
+    rows="3"
+    value={form.excerpt}
+    onChange={handleChange}
+    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  />
+
+  <p className="text-xs text-gray-500">
+    Keep it under 160 characters for best results.
+  </p>
+</div>
+
         <p
   className={`text-xs ${
     form.excerpt.length > 160
@@ -345,16 +529,85 @@ const handleRegenerateContentDirectly = async () => {
   {form.excerpt.length} / 160 characters
 </p>
 
-        <Input
-          label="Content (Markdown)"
-          name="content"
-          as="textarea"
-          rows="12"
-          className="min-h-[240px]"
-          value={form.content}
-          onChange={handleChange}
-          required
-        />
+        {/* SEO Fields */}
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            SEO Information
+          </p>
+          
+          {/* Keyphrases */}
+          {(seoKeyphrases.primary || seoKeyphrases.secondary?.length > 0) && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Primary Keyphrase
+                </label>
+                <input
+                  type="text"
+                  value={seoKeyphrases.primary}
+                  readOnly
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Secondary Keyphrases
+                </label>
+                <input
+                  type="text"
+                  value={seoKeyphrases.secondary?.join(", ") || ""}
+                  readOnly
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* SEO Slug */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              SEO Slug
+            </label>
+            <input
+              type="text"
+              value={seoSlug || generateSlug(form.title)}
+              onChange={(e) => setSeoSlug(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              placeholder="Auto-generated from title"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              URL-friendly slug (auto-generated from title)
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          {/* Label row */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-700">
+              Content (Markdown)
+            </label>
+
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleGenerateContentFromTitle}
+              disabled={generatingContent || !form.title.trim()}
+            >
+              {generatingContent ? "Generating..." : "Generate Content"}
+            </Button>
+          </div>
+
+          {/* Textarea */}
+          <textarea
+            name="content"
+            rows="12"
+            value={form.content}
+            onChange={handleChange}
+            required
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[240px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
 
         <div className="flex justify-end">
           <Button
@@ -465,10 +718,16 @@ const handleRegenerateContentDirectly = async () => {
 {showSeoModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
     <div className="w-full max-w-xl rounded-2xl bg-white p-6 space-y-4">
-      <h3 className="text-lg font-semibold">AI SEO Generator</h3>
+      <h3 className="text-lg font-semibold">
+  {seoMode === "title" && "Generate SEO Titles"}
+  {seoMode === "meta" && "Generate Meta Descriptions"}
+  {seoMode === "keyphrase" && "Generate Keyphrases"}
+  {seoMode === "all" && "AI SEO Generator"}
+</h3>
+
 
       <Input
-        label="Keyword / Idea / Rough Title"
+        label="Idea ?"
         value={seoInput}
         onChange={(e) => setSeoInput(e.target.value)}
         placeholder="e.g. product onboarding"
@@ -488,9 +747,16 @@ const handleRegenerateContentDirectly = async () => {
           </Button>
         )}
 
-        <Button variant="ghost" onClick={() => setShowSeoModal(false)}>
-          Close
-        </Button>
+        <Button
+  variant="ghost"
+  onClick={() => {
+    setShowSeoModal(false);
+    setSeoMode("all");
+  }}
+>
+  Close
+</Button>
+
       </div>
 
       {seoError && (
@@ -499,36 +765,156 @@ const handleRegenerateContentDirectly = async () => {
         </div>
       )}
 
-      {seoResults.length > 0 && (
-  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-    <p className="font-medium mb-2">AI Generated SEO</p>
-
-    <div className="space-y-4">
-      {seoResults.map((item, index) => (
-        <div key={`${item.title}-${index}`} className="rounded-xl border bg-white p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-2">
-            Option {index + 1}
-          </p>
-          <p className="text-base font-medium text-gray-900">{item.title}</p>
-          {Array.isArray(item.keywords) && item.keywords.length > 0 && (
-            <p className="mt-2 text-xs text-gray-600">
-              Keywords: {item.keywords.join(", ")}
-            </p>
+      {(seoTitles.length > 0 || seoResults.length > 0) && (
+        <div className="mt-4 space-y-6 max-h-[70vh] overflow-y-auto">
+          {/* Titles Selection */}
+          {seoTitles.length > 0 && (seoMode === "title" || seoMode === "all") && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-3 text-sm">Select Title</p>
+              <div className="space-y-2">
+                {seoTitles.map((title, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSelectTitle(title)}
+                    className="w-full text-left rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-500 hover:bg-blue-50 transition"
+                  >
+                    <p className="text-sm font-medium text-gray-900">{title}</p>
+                    <p className="text-xs text-gray-500 mt-1">{title.length} characters</p>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
-          <div className="mt-3 flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => handleGenerateContent(item, index)}
-              disabled={seoContentLoadingIndex !== null}
-            >
-              {seoContentLoadingIndex === index ? "Generating..." : "Generate Content"}
-            </Button>
-          </div>
+
+          {/* Meta Descriptions Selection */}
+          {seoMetaDescriptions.length > 0 && (seoMode === "meta" || seoMode === "all") && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-3 text-sm">Select Meta Description</p>
+              <div className="space-y-2">
+                {seoMetaDescriptions.map((desc, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSelectMetaDescription(desc)}
+                    className="w-full text-left rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-500 hover:bg-blue-50 transition"
+                  >
+                    <p className="text-sm text-gray-900">{desc}</p>
+                    <p className="text-xs text-gray-500 mt-1">{desc.length} / 160 characters</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Keyphrases Display */}
+          {(seoKeyphrases.primary || seoKeyphrases.secondary?.length > 0) &&
+ (seoMode === "keyphrase" || seoMode === "all") && (
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-3 text-sm">Keyphrases</p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Primary</p>
+                  <input
+                    type="text"
+                    value={seoKeyphrases.primary}
+                    readOnly
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                {seoKeyphrases.secondary?.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Secondary</p>
+                    <input
+                      type="text"
+                      value={seoKeyphrases.secondary.join(", ")}
+                      readOnly
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* SEO Slug */}
+          {seoSlug && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-2 text-sm">SEO Slug</p>
+              <input
+                type="text"
+                value={seoSlug}
+                onChange={(e) => setSeoSlug(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                placeholder="seo-friendly-url-slug"
+              />
+            </div>
+          )}
+
+          {/* SERP Insights */}
+          {seoSerpInsights && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-2 text-sm">SERP Insights</p>
+              <p className="text-xs text-gray-700 mb-2">{seoSerpInsights.contentAngle}</p>
+              {seoSerpInsights.recommendedSections?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Recommended Sections:</p>
+                  <ul className="list-disc list-inside text-xs text-gray-600 space-y-1">
+                    {seoSerpInsights.recommendedSections.map((section, index) => (
+                      <li key={index}>{section}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legacy format support - for backward compatibility */}
+          {seoResults.length > 0 && seoTitles.length === 0 && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-2">AI Generated SEO</p>
+              <div className="space-y-4">
+                {seoResults.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-xl border bg-white p-4">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">
+                      Option {index + 1}
+                    </p>
+                    <p className="text-base font-medium text-gray-900">{item.title}</p>
+                    {Array.isArray(item.keywords) && item.keywords.length > 0 && (
+                      <p className="mt-2 text-xs text-gray-600">
+                        Keywords: {item.keywords.join(", ")}
+                      </p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          handleSelectTitle(item.title);
+                          if (Array.isArray(item.keywords)) {
+                            setSeoKeyphrases({
+                              primary: item.keywords[0] || "",
+                              secondary: item.keywords.slice(1) || []
+                            });
+                          }
+                        }}
+                      >
+                        Use This
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleGenerateContent(item, index)}
+                        disabled={seoContentLoadingIndex !== null}
+                      >
+                        {seoContentLoadingIndex === index ? "Generating..." : "Generate Content"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      ))}
-    </div>
-  </div>
-)}
+      )}
 
     </div>
   </div>

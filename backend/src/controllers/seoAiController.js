@@ -1,8 +1,22 @@
 import axios from "axios";
+// 🔁 Model fallback order to avoid 429 errors
+const SEO_MODELS = [
+  "google/gemma-2-9b-it",
+  "google/gemma-3-12b-it",
+  "google/gemma-3-27b-it"
+];
+
+// 🧠 Simple in-memory cache (WordPress-like behavior)
+const seoCache = new Map();
 
 export const generateSeoTitles = async (req, res) => {
   try {
     const { input } = req.body;
+    // ⚡ Return cached SEO if exists (prevents repeat AI calls)
+if (seoCache.has(input)) {
+  return res.json(seoCache.get(input));
+}
+
 
     if (!input) {
       return res.status(400).json({ message: "Input is required" });
@@ -16,61 +30,84 @@ export const generateSeoTitles = async (req, res) => {
       });
     }
 
-    const systemPrompt = `You are an expert SEO strategist and professional content writer.
+    const prompt = `You are an advanced SEO engine similar to Yoast + RankMath + SurferSEO.
 
-TASK: Generate EXACTLY 5 SEO-optimized blog titles from the input.
+Your task:
+Given a topic or rough idea, generate SEO-optimized blog metadata
+that can rank on Google.
 
-RULES:
-- Each title MUST be under 60 characters
-- Each title MUST be clear, specific, and search-intent focused
-- Avoid clickbait and vague wording
-- For EACH title, generate 5-7 high-intent SEO keywords:
-  - 1 primary keyword
-  - 2-3 secondary keywords
-  - 1-2 long-tail keywords
-- Keywords must be semantically related and realistic for SEO analysis tools
+STEP 1 — Understand Search Intent
+- Detect whether intent is: informational, commercial, comparison, or guide
 
-OUTPUT FORMAT (JSON only, no explanation):
-[
-  {
-    "title": "...",
-    "keywords": ["primary keyword", "secondary 1", "secondary 2", "secondary 3", "long-tail 1", "long-tail 2"]
+STEP 2 — SERP Gap Identification
+- Identify what competing pages usually cover
+- Identify what is often missing
+- Optimize for higher click-through-rate and topical authority
+
+STEP 3 — Generate SEO Assets
+
+Return ONLY valid JSON in the exact format below.
+
+Topic: "${input}"
+
+JSON FORMAT:
+{
+  "titles": [
+    "SEO optimized title under 60 characters",
+    "SEO optimized title under 60 characters",
+    "SEO optimized title under 60 characters",
+    "SEO optimized title under 60 characters",
+    "SEO optimized title under 60 characters"
+  ],
+  "metaDescriptions": [
+    "Meta description under 160 characters",
+    "Meta description under 160 characters",
+    "Meta description under 160 characters",
+    "Meta description under 160 characters",
+    "Meta description under 160 characters"
+  ],
+  "slug": "seo-friendly-url-slug-with-hyphens",
+  "keyphrases": {
+    "primary": "main seo keyword",
+    "secondary": [
+      "secondary keyword 1",
+      "secondary keyword 2",
+      "secondary keyword 3",
+      "secondary keyword 4"
+    ]
   },
-  {
-    "title": "...",
-    "keywords": ["primary keyword", "secondary 1", "secondary 2", "secondary 3", "long-tail 1", "long-tail 2"]
-  },
-  {
-    "title": "...",
-    "keywords": ["primary keyword", "secondary 1", "secondary 2", "secondary 3", "long-tail 1", "long-tail 2"]
-  },
-  {
-    "title": "...",
-    "keywords": ["primary keyword", "secondary 1", "secondary 2", "secondary 3", "long-tail 1", "long-tail 2"]
-  },
-  {
-    "title": "...",
-    "keywords": ["primary keyword", "secondary 1", "secondary 2", "secondary 3", "long-tail 1", "long-tail 2"]
+  "serpInsights": {
+    "contentAngle": "what angle ranks best",
+    "recommendedSections": [
+      "section idea 1",
+      "section idea 2",
+      "section idea 3"
+    ]
   }
-]
+}
 
-Return ONLY valid JSON array, no markdown, no code blocks, no explanations.`;
+STRICT RULES:
+- Slug must be lowercase, hyphen-separated
+- No markdown
+- No explanation
+- Only valid JSON`;
 
-    const response = await axios.post(
+    const systemPrompt = prompt;
+
+    let response;
+let lastError;
+
+for (const model of SEO_MODELS) {
+  try {
+    response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "google/gemma-3-27b-it",
-        max_tokens: 2000,
+        model,
+        max_tokens: 2500,
         temperature: 0.7,
         messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: input,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: input },
         ],
       },
       {
@@ -83,6 +120,23 @@ Return ONLY valid JSON array, no markdown, no code blocks, no explanations.`;
       }
     );
 
+    // ✅ success → stop trying other models
+    break;
+  } catch (err) {
+    lastError = err;
+
+    // Try next model only if rate-limited
+    if (err.response?.status !== 429) {
+      throw err;
+    }
+  }
+}
+
+if (!response) {
+  throw lastError;
+}
+
+
     const aiText = response.data?.choices?.[0]?.message?.content || "";
     
     // Extract JSON from response (handle markdown code blocks if present)
@@ -91,12 +145,33 @@ Return ONLY valid JSON array, no markdown, no code blocks, no explanations.`;
       jsonText = jsonText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "");
     }
     
-    const titles = JSON.parse(jsonText);
+    const json = JSON.parse(jsonText);
 
-    return res.json({
-      success: true,
-      data: titles,
-    });
+    // Maintain backward compatibility: convert to old format for existing frontend
+    // Old format: data array with {title, keywords}
+    const legacyData = json.titles.map((title, index) => ({
+      title,
+      keywords: [
+        json.keyphrases.primary,
+        ...json.keyphrases.secondary
+      ]
+    }));
+
+    const payload = {
+  success: true,
+  data: legacyData, // backward compatibility
+  titles: json.titles,
+  metaDescriptions: json.metaDescriptions,
+  slug: json.slug,
+  keyphrases: json.keyphrases,
+  serpInsights: json.serpInsights
+};
+
+// 🧠 cache result
+seoCache.set(input, payload);
+
+return res.json(payload);
+
   } catch (error) {
     console.error("SEO Titles ERROR:", error.response?.data || error.message);
     console.error("Full error:", JSON.stringify(error.response?.data, null, 2));

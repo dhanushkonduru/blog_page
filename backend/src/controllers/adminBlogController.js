@@ -29,17 +29,29 @@ export const createBlog = asyncHandler(async (req, res) => {
   const category = sanitizeText(req.body.category || "");
   const author = sanitizeText(req.body.author || "");
   const status = req.body.status || "Draft";
+  // Use provided SEO slug or generate from title
+  const slug = req.body.slug && req.body.slug.trim() 
+    ? sanitizeText(req.body.slug.trim().toLowerCase().replace(/\s+/g, "-"))
+    : slugify(title, { lower: true, strict: true });
 
   const blog = await Blog.create({
-    title,
-    content,
-    excerpt,
-    coverImage,
-    category,
-    author,
-    status,
-    slug: slugify(title, { lower: true, strict: true })
-  });
+  title,
+  content,
+  excerpt, // meta description
+  coverImage,
+  category,
+  author,
+  status,
+  slug,
+
+  // ✅ SEO fields (WordPress-style)
+  seo: {
+    metaDescription: excerpt,
+    primaryKeyphrase: req.body.primaryKeyphrase || "",
+    secondaryKeyphrases: req.body.secondaryKeyphrases || [],
+  }
+});
+
 
   res.status(201).json(blog);
 });
@@ -65,7 +77,19 @@ export const updateBlog = asyncHandler(async (req, res) => {
   blog.category = category;
   blog.author = author;
   blog.status = status;
-  blog.slug = slugify(title, { lower: true, strict: true });
+  // Use provided SEO slug or generate from title
+  blog.slug = req.body.slug && req.body.slug.trim()
+    ? sanitizeText(req.body.slug.trim().toLowerCase().replace(/\s+/g, "-"))
+    : slugify(title, { lower: true, strict: true });
+    // ✅ Update SEO fields if provided
+if (req.body.primaryKeyphrase || req.body.secondaryKeyphrases) {
+  blog.seo = {
+    metaDescription: blog.excerpt,
+    primaryKeyphrase: req.body.primaryKeyphrase || blog.seo?.primaryKeyphrase || "",
+    secondaryKeyphrases: req.body.secondaryKeyphrases || blog.seo?.secondaryKeyphrases || [],
+  };
+}
+
 
   await blog.save();
   res.json(blog);
