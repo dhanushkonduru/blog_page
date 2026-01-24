@@ -6,6 +6,7 @@ import Loader from "../components/Loader.jsx";
 import Input from "../components/Input.jsx";
 import SeoScoreMeter from "../components/SeoScoreMeter.jsx";
 import SeoCheckList from "../components/SeoCheckList.jsx";
+import SerpPreview from "../components/SerpPreview.jsx";
 
 const emptyForm = {
   title: "",
@@ -789,6 +790,14 @@ const handleRegenerateContentDirectly = async () => {
             </div>
           )}
         </div>
+
+        {/* Google SERP Preview */}
+        <SerpPreview
+          title={form.title}
+          slug={seoSlug || generateSlug(form.title)}
+          metaDescription={form.excerpt}
+          image={form.coverImage}
+        />
 
         <div className="space-y-1">
           {/* Label row */}
