@@ -152,9 +152,13 @@ const [seoMode, setSeoMode] = useState("all");
       const seoData = await autoGenerateSeoFromTitle(form.title);
       if (seoData) {
         if (seoData.metaDescription && !form.excerpt) {
-          updatedExcerpt = seoData.metaDescription;
-          setForm((prev) => ({ ...prev, excerpt: seoData.metaDescription }));
-        }
+  updatedExcerpt = seoData.metaDescription;
+  setForm((prev) => ({
+    ...prev,
+    excerpt: seoData.metaDescription
+  }));
+}
+
         if (seoData.slug) {
           updatedSlug = seoData.slug;
           setSeoSlug(seoData.slug);
@@ -275,10 +279,13 @@ const handleGenerateContent = async (item, index) => {
 
   try {
     const res = await api.post("/admin/blogs/ai/content", {
-      title: item.title,
-      keywords: item.keywords,
-      originalInput: seoInput
-    });
+  title: item.title,
+  keywords: item.keywords,
+  originalInput: seoInput,
+  force: true
+});
+
+
 
     const payload = res.data?.data;
     if (payload?.title && payload?.excerpt && payload?.content) {
@@ -302,6 +309,7 @@ const handleGenerateContent = async (item, index) => {
 
 const handleGenerateContentFromTitle = async () => {
   if (!form.title.trim()) {
+    setError("Please enter a title first.");
     return;
   }
 
@@ -309,32 +317,38 @@ const handleGenerateContentFromTitle = async () => {
   setError("");
 
   try {
-    // Use existing keyphrases if available, otherwise use title as keyword
-    const keywords = seoKeyphrases?.primary 
+    // ✅ Use SEO keyphrases if available, else fallback to title
+    const keywords = seoKeyphrases?.primary
       ? [seoKeyphrases.primary, ...(seoKeyphrases.secondary || [])]
       : [form.title];
-    
-    const contentRes = await api.post("/admin/blogs/ai/content", {
+
+    const res = await api.post("/admin/blogs/ai/content", {
       title: form.title,
-      keywords: keywords,
-      originalInput: form.title
+      keywords,
+      originalInput: form.title,
     });
 
-    const generatedContent = contentRes.data?.data?.content;
-    if (generatedContent) {
+    const payload = res.data?.data;
+
+    if (payload?.content) {
       setForm((prev) => ({
         ...prev,
-        content: generatedContent
+        content: payload.content,
+        excerpt: payload.excerpt || prev.excerpt,
       }));
     }
   } catch (err) {
     console.error("Content Generation Error:", err);
-    const errorMsg = err.response?.data?.message || err.message || "Unable to generate content. Please try again.";
-    setError(errorMsg);
+    setError(
+      err.response?.data?.message ||
+        err.message ||
+        "Unable to generate content. Please try again."
+    );
   } finally {
     setGeneratingContent(false);
   }
 };
+
 
 const handleRegenerateContentDirectly = async () => {
   if (!form.title.trim()) {

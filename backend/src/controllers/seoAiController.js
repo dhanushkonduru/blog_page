@@ -9,6 +9,10 @@ const SEO_MODELS = [
 // 🧠 Simple in-memory cache (WordPress-like behavior)
 const seoCache = new Map();
 
+// 🧠 Content generation cache & in-flight protection
+const contentCache = new Map();
+const contentInFlight = new Set();
+
 export const generateSeoTitles = async (req, res) => {
   try {
     const { input } = req.body;
@@ -207,16 +211,38 @@ return res.json(payload);
   }
 };
 
+
 export const generateBlogContent = async (req, res) => {
+  const { title, keywords, originalInput, force } = req.body;
+
+  // ✅ Validate BEFORE using keywords
+  if (!title || !keywords || !Array.isArray(keywords)) {
+    return res.status(400).json({
+      message: "Title and keywords array are required",
+    });
+  }
+
+  const cacheKey = `${title}|${keywords.join(",")}`;
+
+  // 🔥 FORCE regenerate → clear cache
+  if (force === true) {
+    contentCache.delete(cacheKey);
+  }
+
+  // 🧠 Serve from cache if exists (and not forcing)
+  if (!force && contentCache.has(cacheKey)) {
+    return res.json(contentCache.get(cacheKey));
+  }
+
+  // ⏳ Prevent duplicate in-flight generations
+  if (contentInFlight.has(cacheKey)) {
+    return res.status(429).json({
+      success: false,
+      message: "Content generation already in progress. Please wait.",
+    });
+  }
+
   try {
-    const { title, keywords, originalInput } = req.body;
-
-    if (!title || !keywords || !Array.isArray(keywords)) {
-      return res.status(400).json({ 
-        message: "Title and keywords array are required" 
-      });
-    }
-
     if (!process.env.OPENROUTER_API_KEY) {
       console.error("OPENROUTER_API_KEY is not set in environment variables");
       return res.status(500).json({
@@ -224,6 +250,10 @@ export const generateBlogContent = async (req, res) => {
         message: "API key not configured. Please set OPENROUTER_API_KEY in .env file.",
       });
     }
+
+    // ➕ mark as in-flight
+    contentInFlight.add(cacheKey);
+
 
     const primaryKeyword = keywords[0];
     const secondaryKeywords = keywords.slice(1, 4).join(", ");
@@ -260,32 +290,64 @@ Return ONLY valid JSON, no markdown code blocks, no explanations.`;
 Title: ${title}
 Original input: ${originalInput || "N/A"}`;
 
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "google/gemma-3-27b-it",
-        max_tokens: 4000,
-        temperature: 0.7,
-        messages: [
+    // Model fallback with retry logic
+    let response;
+    let lastError;
+
+    for (const model of SEO_MODELS) {
+      try {
+        response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
           {
-            role: "system",
-            content: systemPrompt,
+            model,
+            max_tokens: 4000,
+            temperature: 0.7,
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content: userPrompt,
+              },
+            ],
           },
           {
-            role: "user",
-            content: userPrompt,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "http://localhost:5173",
-          "X-Title": "SEO AI Blog Generator",
-        },
+            headers: {
+              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "http://localhost:5173",
+              "X-Title": "SEO AI Blog Generator",
+            },
+          }
+        );
+        // Success - break out of loop
+        break;
+      } catch (err) {
+        lastError = err;
+        // If 429, wait 1500ms then try next model
+        if (err.response?.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          continue;
+        }
+        // For non-429 errors, throw immediately
+        throw err;
       }
-    );
+    }
+
+    // If all models failed with 429, return friendly error
+    if (!response && lastError?.response?.status === 429) {
+      return res.status(429).json({
+        success: false,
+        message: "AI is busy. Please try again shortly.",
+      });
+    }
+
+    // If no response and lastError exists, throw it
+    if (!response) {
+      throw lastError;
+    }
 
     const aiText = response.data?.choices?.[0]?.message?.content || "";
     
@@ -295,17 +357,32 @@ Original input: ${originalInput || "N/A"}`;
       jsonText = jsonText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "");
     }
     
-    const blogData = JSON.parse(jsonText);
+    // Handle malformed JSON responses
+    let blogData;
+    try {
+      blogData = JSON.parse(jsonText);
+    } catch (parseError) {
+      return res.status(502).json({
+        success: false,
+        message: "AI returned malformed content. Please retry.",
+      });
+    }
 
-    return res.json({
-      success: true,
-      data: {
-        title,
-        excerpt: blogData.excerpt,
-        content: blogData.content,
-        keywords,
-      },
-    });
+    const payload = {
+  success: true,
+  data: {
+    title,
+    excerpt: blogData.excerpt,
+    content: blogData.content,
+    keywords,
+  },
+};
+
+// 🧠 cache content
+contentCache.set(cacheKey, payload);
+
+return res.json(payload);
+
   } catch (error) {
     console.error("Blog Content ERROR:", error.response?.data || error.message);
     console.error("Full error:", JSON.stringify(error.response?.data, null, 2));
@@ -338,5 +415,8 @@ Original input: ${originalInput || "N/A"}`;
       error: errorDetails,
       code: error.response?.data?.error?.code || error.response?.status,
     });
+  } finally {
+    // Always remove from in-flight set
+    contentInFlight.delete(cacheKey);
   }
 };
