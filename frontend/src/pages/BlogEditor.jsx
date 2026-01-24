@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios.js";
 import Button from "../components/Button.jsx";
 import Loader from "../components/Loader.jsx";
 import Input from "../components/Input.jsx";
+import SeoScoreMeter from "../components/SeoScoreMeter.jsx";
+import SeoCheckList from "../components/SeoCheckList.jsx";
 
 const emptyForm = {
   title: "",
@@ -40,6 +42,13 @@ const [seoKeyphrases, setSeoKeyphrases] = useState({ primary: "", secondary: [] 
 const [seoSerpInsights, setSeoSerpInsights] = useState(null);
 const [seoMode, setSeoMode] = useState("all"); 
 // "title" | "meta" | "keyphrase" | "all"
+
+// Real-time SEO analysis state
+const [seoScore, setSeoScore] = useState(0);
+const [seoChecks, setSeoChecks] = useState([]);
+const [serpBenchmarks, setSerpBenchmarks] = useState(null);
+const [analyzingSeo, setAnalyzingSeo] = useState(false);
+const seoAnalysisTimeoutRef = useRef(null);
 
   // WordPress-style slug generation
   function generateSlug(text) {
@@ -95,6 +104,89 @@ const [seoMode, setSeoMode] = useState("all");
       setSeoSlug(generateSlug(value));
     }
   };
+
+  // Debounced SEO analysis when title or primary keyword changes
+  useEffect(() => {
+    // Clear existing timeout
+    if (seoAnalysisTimeoutRef.current) {
+      clearTimeout(seoAnalysisTimeoutRef.current);
+    }
+
+    // Skip if no title or primary keyword
+    if (!form.title.trim() || !seoKeyphrases.primary.trim()) {
+      setSeoScore(0);
+      setSeoChecks([]);
+      setSerpBenchmarks(null);
+      return;
+    }
+
+    // Debounce: wait 1.5 seconds after user stops typing
+    seoAnalysisTimeoutRef.current = setTimeout(async () => {
+      setAnalyzingSeo(true);
+      
+      try {
+        // Step 1: Fetch SERP analysis
+        const serpRes = await api.post("/admin/seo/serp-analysis", {
+          keyword: seoKeyphrases.primary,
+          location: "United States"
+        });
+
+        if (serpRes.data.success) {
+          const benchmarks = {
+            avgWordCount: serpRes.data.avgWordCount || 0,
+            commonHeadings: serpRes.data.commonHeadings || [],
+            contentGaps: serpRes.data.contentGaps || [],
+            serpTitles: serpRes.data.serpTitles || [],
+            serpMetaPatterns: serpRes.data.serpMetaPatterns || []
+          };
+          setSerpBenchmarks(benchmarks);
+
+          // Step 2: Calculate SEO score with SERP benchmarks
+          const scoreRes = await api.post("/admin/seo/score", {
+            title: form.title,
+            metaDescription: form.excerpt,
+            content: form.content,
+            slug: seoSlug || generateSlug(form.title),
+            primaryKeyword: seoKeyphrases.primary,
+            serpBenchmarks: benchmarks
+          });
+
+          if (scoreRes.data.success) {
+            setSeoScore(scoreRes.data.score || 0);
+            setSeoChecks(scoreRes.data.checks || []);
+          }
+        }
+      } catch (error) {
+        console.error("SEO Analysis Error:", error);
+        // Still calculate score without SERP benchmarks
+        try {
+          const scoreRes = await api.post("/admin/seo/score", {
+            title: form.title,
+            metaDescription: form.excerpt,
+            content: form.content,
+            slug: seoSlug || generateSlug(form.title),
+            primaryKeyword: seoKeyphrases.primary,
+            serpBenchmarks: null
+          });
+
+          if (scoreRes.data.success) {
+            setSeoScore(scoreRes.data.score || 0);
+            setSeoChecks(scoreRes.data.checks || []);
+          }
+        } catch (scoreError) {
+          console.error("SEO Score Calculation Error:", scoreError);
+        }
+      } finally {
+        setAnalyzingSeo(false);
+      }
+    }, 1500);
+
+    return () => {
+      if (seoAnalysisTimeoutRef.current) {
+        clearTimeout(seoAnalysisTimeoutRef.current);
+      }
+    };
+  }, [form.title, form.excerpt, form.content, seoSlug, seoKeyphrases.primary]);
   const validateForm = () => {
   if (
     !form.title.trim() ||
@@ -593,6 +685,63 @@ const handleRegenerateContentDirectly = async () => {
               URL-friendly slug (auto-generated from title)
             </p>
           </div>
+
+          {/* Real-time SEO Analysis */}
+          {seoKeyphrases.primary && form.title && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm font-semibold text-gray-900">
+                  Real-time SEO Analysis
+                </p>
+                {analyzingSeo && (
+                  <span className="text-xs text-gray-500">Analyzing...</span>
+                )}
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* SEO Score Meter */}
+                <div className="flex flex-col items-center">
+                  <SeoScoreMeter score={seoScore} size={120} />
+                </div>
+
+                {/* SEO Checks */}
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-3">
+                    SEO Checks
+                  </p>
+                  <SeoCheckList checks={seoChecks} />
+                </div>
+              </div>
+
+              {/* Content Gap Suggestions */}
+              {serpBenchmarks && serpBenchmarks.contentGaps && serpBenchmarks.contentGaps.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <p className="text-xs font-medium text-gray-700 mb-3">
+                    Content Gap Suggestions
+                  </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-600 mb-2">
+                      Top-ranking pages include sections on:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-xs text-gray-700">
+                      {serpBenchmarks.contentGaps.slice(0, 5).map((gap, index) => (
+                        <li key={index}>{gap}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* SERP Benchmarks Info */}
+              {serpBenchmarks && serpBenchmarks.avgWordCount > 0 && (
+                <div className="mt-4 text-xs text-gray-500">
+                  <p>
+                    SERP Average Word Count: <strong>{serpBenchmarks.avgWordCount}</strong> words
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
