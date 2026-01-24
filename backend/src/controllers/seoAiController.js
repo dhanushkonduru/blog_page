@@ -189,8 +189,14 @@ return res.json(payload);
       
       // OpenRouter error format
       if (errorData.error) {
-        errorMessage = errorData.error.message || errorData.error.type || "Provider returned error";
-        errorDetails = errorData.error;
+        // Handle API key errors with user-friendly message
+        if (errorData.error.code === 401 || error.response?.status === 401) {
+          errorMessage = "Invalid or expired API key. Please check your OPENROUTER_API_KEY.";
+          errorDetails = "API authentication failed";
+        } else {
+          errorMessage = errorData.error.message || errorData.error.type || "Provider returned error";
+          errorDetails = errorData.error;
+        }
       } else if (errorData.message) {
         errorMessage = errorData.message;
       } else if (typeof errorData === 'string') {
@@ -396,8 +402,14 @@ return res.json(payload);
       
       // OpenRouter error format
       if (errorData.error) {
-        errorMessage = errorData.error.message || errorData.error.type || "Provider returned error";
-        errorDetails = errorData.error;
+        // Handle API key errors with user-friendly message
+        if (errorData.error.code === 401 || error.response?.status === 401) {
+          errorMessage = "Invalid or expired API key. Please check your OPENROUTER_API_KEY.";
+          errorDetails = "API authentication failed";
+        } else {
+          errorMessage = errorData.error.message || errorData.error.type || "Provider returned error";
+          errorDetails = errorData.error;
+        }
       } else if (errorData.message) {
         errorMessage = errorData.message;
       } else if (typeof errorData === 'string') {

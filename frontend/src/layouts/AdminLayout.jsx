@@ -11,9 +11,9 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="flex min-h-screen w-full">
-        <aside className="hidden w-64 flex-col border-r border-gray-200 bg-white px-6 py-10 md:flex">
+    <div className="h-screen overflow-hidden bg-gray-50 text-gray-900">
+      <div className="flex h-full w-full">
+        <aside className="hidden fixed inset-y-0 left-0 w-64 flex-col border-r border-gray-200 bg-white px-6 py-10 md:flex">
           <Link to="/admin" className="text-lg font-semibold text-gray-900">
             Admin Panel
           </Link>
@@ -57,7 +57,7 @@ export default function AdminLayout() {
             View Site
           </Link>
         </aside>
-        <main className="flex-1 px-6 py-10 md:px-10">
+        <main className="flex-1 ml-0 md:ml-64 px-6 py-10 md:px-10 overflow-y-auto">
           <div className="md:hidden">
             <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               <Link to="/admin" className="text-sm font-semibold">
