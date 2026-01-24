@@ -218,6 +218,147 @@ return res.json(payload);
 };
 
 
+// 🧠 Meta description cache
+const metaDescCache = new Map();
+
+export const generateMetaDescriptions = async (req, res) => {
+  try {
+    const { title } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: "Title is required" });
+    }
+
+    // ⚡ Return cached if exists
+    if (metaDescCache.has(title)) {
+      return res.json(metaDescCache.get(title));
+    }
+
+    if (!process.env.OPENROUTER_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "API key not configured. Please set OPENROUTER_API_KEY in .env file.",
+      });
+    }
+
+    const prompt = `You are an SEO expert specializing in meta descriptions.
+
+Your task: Generate 5 unique, compelling meta descriptions specifically for this blog title.
+
+Title: "${title}"
+
+REQUIREMENTS:
+- Each meta description must be under 160 characters
+- Include a call-to-action or curiosity hook
+- Be specific to the title's topic
+- No fluff, no emojis
+- Optimized for click-through rate
+
+Return ONLY valid JSON in this exact format:
+{
+  "metaDescriptions": [
+    "Meta description 1 under 160 characters",
+    "Meta description 2 under 160 characters",
+    "Meta description 3 under 160 characters",
+    "Meta description 4 under 160 characters",
+    "Meta description 5 under 160 characters"
+  ]
+}
+
+STRICT RULES:
+- No markdown
+- No explanation
+- Only valid JSON`;
+
+    let response;
+    let lastError;
+
+    for (const model of SEO_MODELS) {
+      try {
+        response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            model,
+            max_tokens: 1000,
+            temperature: 0.7,
+            messages: [
+              { role: "system", content: prompt },
+              { role: "user", content: title },
+            ],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "http://localhost:5173",
+              "X-Title": "SEO AI Blog Generator",
+            },
+          }
+        );
+        break;
+      } catch (err) {
+        lastError = err;
+        if (err.response?.status !== 429) {
+          throw err;
+        }
+      }
+    }
+
+    if (!response) {
+      throw lastError;
+    }
+
+    const aiText = response.data?.choices?.[0]?.message?.content || "";
+    
+    let jsonText = aiText.trim();
+    if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "");
+    }
+    
+    const json = JSON.parse(jsonText);
+
+    const payload = {
+      success: true,
+      title,
+      metaDescriptions: json.metaDescriptions || []
+    };
+
+    // 🧠 cache result
+    metaDescCache.set(title, payload);
+
+    return res.json(payload);
+
+  } catch (error) {
+    console.error("Meta Description ERROR:", error.response?.data || error.message);
+
+    let errorMessage = "AI generation failed";
+    let errorDetails = error.message;
+
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      if (errorData.error) {
+        if (errorData.error.code === 401 || error.response?.status === 401) {
+          errorMessage = "Invalid or expired API key. Please check your OPENROUTER_API_KEY.";
+          errorDetails = "API authentication failed";
+        } else {
+          errorMessage = errorData.error.message || errorData.error.type || "Provider returned error";
+          errorDetails = errorData.error;
+        }
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+    }
+
+    const statusCode = error.response?.status === 401 ? 500 : (error.response?.status || 500);
+    
+    return res.status(statusCode).json({
+      success: false,
+      message: errorMessage,
+      error: errorDetails,
+    });
+  }
+};
+
 export const generateBlogContent = async (req, res) => {
   const { title, keywords, originalInput, force } = req.body;
 

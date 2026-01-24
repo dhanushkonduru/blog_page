@@ -316,6 +316,9 @@ const handleGenerateSeo = async (regenerate = false) => {
 
   setSeoLoading(true);
   setSeoError("");
+  // Reset title-specific meta descriptions when generating new titles
+  setSelectedTitle("");
+  setSeoMetaDescriptions([]);
 
   try {
     const res = await api.post("/admin/blogs/ai/titles", {
@@ -328,10 +331,9 @@ const handleGenerateSeo = async (regenerate = false) => {
       throw new Error(res.data.message || "Invalid response from server");
     }
 
-    // Handle new response format
-    if (res.data.titles && res.data.metaDescriptions) {
+    // Handle new response format - only set titles, meta will be generated after title selection
+    if (res.data.titles) {
       setSeoTitles(res.data.titles);
-      setSeoMetaDescriptions(res.data.metaDescriptions);
       setSeoSlug(res.data.slug || "");
       setSeoKeyphrases(res.data.keyphrases || { primary: "", secondary: [] });
       setSeoSerpInsights(res.data.serpInsights || null);
@@ -352,10 +354,35 @@ const handleGenerateSeo = async (regenerate = false) => {
   }
 };
 
-// Handler for selecting a title
-const handleSelectTitle = (title) => {
+// State for meta description generation
+const [metaLoading, setMetaLoading] = useState(false);
+const [selectedTitle, setSelectedTitle] = useState("");
+
+// Handler for selecting a title - generates meta descriptions for that title
+const handleSelectTitle = async (title) => {
   setForm((prev) => ({ ...prev, title }));
   setSeoSlug(generateSlug(title));
+  setSelectedTitle(title);
+  
+  // Clear old meta descriptions and generate new ones for this specific title
+  setSeoMetaDescriptions([]);
+  setMetaLoading(true);
+  setSeoError("");
+
+  try {
+    const res = await api.post("/admin/blogs/ai/meta", { title });
+    
+    if (res.data.success && res.data.metaDescriptions) {
+      setSeoMetaDescriptions(res.data.metaDescriptions);
+    } else {
+      throw new Error(res.data.message || "Failed to generate meta descriptions");
+    }
+  } catch (err) {
+    console.error("Meta Description Generation Error:", err);
+    setSeoError(err.response?.data?.message || err.message || "Unable to generate meta descriptions.");
+  } finally {
+    setMetaLoading(false);
+  }
 };
 
 // Handler for selecting a meta description
@@ -600,9 +627,28 @@ const handleRegenerateContentDirectly = async () => {
     <Button
       size="sm"
       variant="secondary"
-      onClick={() => {
+      onClick={async () => {
         setSeoMode("meta");
         setShowSeoModal(true);
+        
+        // If there's already a title, generate meta descriptions for it
+        if (form.title.trim()) {
+          setSelectedTitle(form.title);
+          setSeoMetaDescriptions([]);
+          setMetaLoading(true);
+          setSeoError("");
+          
+          try {
+            const res = await api.post("/admin/blogs/ai/meta", { title: form.title });
+            if (res.data.success && res.data.metaDescriptions) {
+              setSeoMetaDescriptions(res.data.metaDescriptions);
+            }
+          } catch (err) {
+            setSeoError(err.response?.data?.message || "Unable to generate meta descriptions.");
+          } finally {
+            setMetaLoading(false);
+          }
+        }
       }}
     >
       Generate Meta Description
@@ -915,6 +961,7 @@ const handleRegenerateContentDirectly = async () => {
   onClick={() => {
     setShowSeoModal(false);
     setSeoMode("all");
+    setSelectedTitle("");
   }}
 >
   Close
@@ -950,21 +997,72 @@ const handleRegenerateContentDirectly = async () => {
           )}
 
           {/* Meta Descriptions Selection */}
-          {seoMetaDescriptions.length > 0 && (seoMode === "meta" || seoMode === "all") && (
+          {(seoMode === "title" || seoMode === "all") && selectedTitle && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <p className="font-medium mb-3 text-sm">Select Meta Description</p>
-              <div className="space-y-2">
-                {seoMetaDescriptions.map((desc, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSelectMetaDescription(desc)}
-                    className="w-full text-left rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-500 hover:bg-blue-50 transition"
-                  >
-                    <p className="text-sm text-gray-900">{desc}</p>
-                    <p className="text-xs text-gray-500 mt-1">{desc.length} / 160 characters</p>
-                  </button>
-                ))}
-              </div>
+              <p className="font-medium mb-1 text-sm">Meta Descriptions</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Generated specifically for: <span className="font-medium text-gray-700">"{selectedTitle}"</span>
+              </p>
+              
+              {metaLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-sm text-gray-600">Generating meta descriptions...</span>
+                </div>
+              ) : seoMetaDescriptions.length > 0 ? (
+                <div className="space-y-2">
+                  {seoMetaDescriptions.map((desc, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSelectMetaDescription(desc)}
+                      className="w-full text-left rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-500 hover:bg-blue-50 transition"
+                    >
+                      <p className="text-sm text-gray-900">{desc}</p>
+                      <p className="text-xs text-gray-500 mt-1">{desc.length} / 160 characters</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Select a title above to generate meta descriptions
+                </p>
+              )}
+            </div>
+          )}
+          
+          {/* Standalone Meta Description Generation (when opened via "Generate Meta Description" button) */}
+          {seoMode === "meta" && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="font-medium mb-1 text-sm">Meta Descriptions</p>
+              {selectedTitle && (
+                <p className="text-xs text-gray-500 mb-3">
+                  Generated for: <span className="font-medium text-gray-700">"{selectedTitle}"</span>
+                </p>
+              )}
+              
+              {metaLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-sm text-gray-600">Generating meta descriptions...</span>
+                </div>
+              ) : seoMetaDescriptions.length > 0 ? (
+                <div className="space-y-2">
+                  {seoMetaDescriptions.map((desc, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSelectMetaDescription(desc)}
+                      className="w-full text-left rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-500 hover:bg-blue-50 transition"
+                    >
+                      <p className="text-sm text-gray-900">{desc}</p>
+                      <p className="text-xs text-gray-500 mt-1">{desc.length} / 160 characters</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  {form.title.trim() ? "Generating..." : "Please add a title first to generate meta descriptions"}
+                </p>
+              )}
             </div>
           )}
 
