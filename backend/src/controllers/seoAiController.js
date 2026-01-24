@@ -9,17 +9,22 @@ const SEO_MODELS = [
 // 🧠 Simple in-memory cache (WordPress-like behavior)
 const seoCache = new Map();
 
-// 🧠 Content generation cache & in-flight protection
+// 🧠 Content generation cache
 const contentCache = new Map();
-const contentInFlight = new Set();
 
 export const generateSeoTitles = async (req, res) => {
   try {
-    const { input } = req.body;
+    const { input, force } = req.body;
+    
+    // 🔥 Force regenerate → clear cache
+    if (force === true) {
+      seoCache.delete(input);
+    }
+    
     // ⚡ Return cached SEO if exists (prevents repeat AI calls)
-if (seoCache.has(input)) {
-  return res.json(seoCache.get(input));
-}
+    if (seoCache.has(input)) {
+      return res.json(seoCache.get(input));
+    }
 
 
     if (!input) {
@@ -37,64 +42,62 @@ if (seoCache.has(input)) {
     const prompt = `You are an advanced SEO engine similar to Yoast + RankMath + SurferSEO.
 
 Your task:
-Given a topic or rough idea, generate SEO-optimized blog metadata
-that can rank on Google.
-
-STEP 1 — Understand Search Intent
-- Detect whether intent is: informational, commercial, comparison, or guide
-
-STEP 2 — SERP Gap Identification
-- Identify what competing pages usually cover
-- Identify what is often missing
-- Optimize for higher click-through-rate and topical authority
-
-STEP 3 — Generate SEO Assets
-
-Return ONLY valid JSON in the exact format below.
+Given a topic or rough idea, generate SEO-optimized blog metadata that can rank on Google.
 
 Topic: "${input}"
+
+CRITICAL SEO REQUIREMENTS (MUST FOLLOW):
+
+1. PRIMARY KEYWORD:
+   - First, identify a strong primary keyword (2-4 words) for this topic
+   - This keyword MUST appear in EVERY title you generate
+   - This keyword MUST appear in the slug
+
+2. TITLES (5 options):
+   - Length: EXACTLY 50-60 characters (count carefully!)
+   - MUST contain the primary keyword
+   - Include power words for CTR
+
+3. META DESCRIPTIONS (5 options):
+   - Length: EXACTLY 140-160 characters (count carefully!)
+   - MUST contain the primary keyword
+   - Include a call-to-action
+
+4. SLUG:
+   - MUST contain the primary keyword
+   - Lowercase, hyphen-separated
 
 JSON FORMAT:
 {
   "titles": [
-    "SEO optimized title under 60 characters",
-    "SEO optimized title under 60 characters",
-    "SEO optimized title under 60 characters",
-    "SEO optimized title under 60 characters",
-    "SEO optimized title under 60 characters"
+    "Title with primary keyword (50-60 chars)",
+    "Title with primary keyword (50-60 chars)",
+    "Title with primary keyword (50-60 chars)",
+    "Title with primary keyword (50-60 chars)",
+    "Title with primary keyword (50-60 chars)"
   ],
   "metaDescriptions": [
-    "Meta description under 160 characters",
-    "Meta description under 160 characters",
-    "Meta description under 160 characters",
-    "Meta description under 160 characters",
-    "Meta description under 160 characters"
+    "Description with keyword (140-160 chars)",
+    "Description with keyword (140-160 chars)",
+    "Description with keyword (140-160 chars)",
+    "Description with keyword (140-160 chars)",
+    "Description with keyword (140-160 chars)"
   ],
-  "slug": "seo-friendly-url-slug-with-hyphens",
+  "slug": "primary-keyword-in-slug",
   "keyphrases": {
-    "primary": "main seo keyword",
-    "secondary": [
-      "secondary keyword 1",
-      "secondary keyword 2",
-      "secondary keyword 3",
-      "secondary keyword 4"
-    ]
+    "primary": "exact primary keyword used in titles",
+    "secondary": ["keyword 1", "keyword 2", "keyword 3", "keyword 4"]
   },
   "serpInsights": {
     "contentAngle": "what angle ranks best",
-    "recommendedSections": [
-      "section idea 1",
-      "section idea 2",
-      "section idea 3"
-    ]
+    "recommendedSections": ["section 1", "section 2", "section 3"]
   }
 }
 
 STRICT RULES:
-- Slug must be lowercase, hyphen-separated
-- No markdown
-- No explanation
-- Only valid JSON`;
+- Count characters carefully for titles (50-60) and meta descriptions (140-160)
+- Primary keyword MUST appear in all titles and the slug
+- No markdown, no explanation, only valid JSON`;
 
     const systemPrompt = prompt;
 
@@ -223,10 +226,15 @@ const metaDescCache = new Map();
 
 export const generateMetaDescriptions = async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, force } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
+    }
+
+    // 🔥 Force regenerate → clear cache
+    if (force === true) {
+      metaDescCache.delete(title);
     }
 
     // ⚡ Return cached if exists
@@ -247,28 +255,29 @@ Your task: Generate 5 unique, compelling meta descriptions specifically for this
 
 Title: "${title}"
 
-REQUIREMENTS:
-- Each meta description must be under 160 characters
-- Include a call-to-action or curiosity hook
-- Be specific to the title's topic
-- No fluff, no emojis
-- Optimized for click-through rate
+CRITICAL REQUIREMENTS (MUST FOLLOW):
+1. Each meta description MUST be EXACTLY 140-160 characters (count carefully!)
+2. Extract the main keyword from the title and include it in each description
+3. Include a call-to-action or curiosity hook
+4. Be specific to the title's topic
+5. No fluff, no emojis
+6. Optimized for click-through rate
 
 Return ONLY valid JSON in this exact format:
 {
   "metaDescriptions": [
-    "Meta description 1 under 160 characters",
-    "Meta description 2 under 160 characters",
-    "Meta description 3 under 160 characters",
-    "Meta description 4 under 160 characters",
-    "Meta description 5 under 160 characters"
+    "Description with keyword from title (140-160 chars exactly)",
+    "Description with keyword from title (140-160 chars exactly)",
+    "Description with keyword from title (140-160 chars exactly)",
+    "Description with keyword from title (140-160 chars exactly)",
+    "Description with keyword from title (140-160 chars exactly)"
   ]
 }
 
 STRICT RULES:
-- No markdown
-- No explanation
-- Only valid JSON`;
+- Count characters carefully - each MUST be 140-160 characters
+- Include the main keyword from the title
+- No markdown, no explanation, only valid JSON`;
 
     let response;
     let lastError;
@@ -381,13 +390,7 @@ export const generateBlogContent = async (req, res) => {
     return res.json(contentCache.get(cacheKey));
   }
 
-  // ⏳ Prevent duplicate in-flight generations
-  if (contentInFlight.has(cacheKey)) {
-    return res.status(429).json({
-      success: false,
-      message: "Content generation already in progress. Please wait.",
-    });
-  }
+  // Note: Removed in-flight limiter to allow unlimited regeneration
 
   try {
     if (!process.env.OPENROUTER_API_KEY) {
@@ -398,8 +401,6 @@ export const generateBlogContent = async (req, res) => {
       });
     }
 
-    // ➕ mark as in-flight
-    contentInFlight.add(cacheKey);
 
 
     const primaryKeyword = keywords[0];
@@ -408,27 +409,38 @@ export const generateBlogContent = async (req, res) => {
 
     const systemPrompt = `You are an expert SEO strategist and professional content writer.
 
-TASK: Generate complete blog content based on the selected title.
+TASK: Generate complete blog content that will score 90+ on SEO analysis tools.
 
-STRICT REQUIREMENTS:
-1. Excerpt: 150-160 characters, SEO-optimized, no emojis, no fluff
-2. Full blog content in Markdown:
+PRIMARY KEYWORD: "${primaryKeyword}"
+SECONDARY KEYWORDS: ${secondaryKeywords}
+
+CRITICAL SEO REQUIREMENTS (MUST ALL BE MET):
+
+1. EXCERPT/META DESCRIPTION:
+   - EXACTLY 140-160 characters (count carefully!)
+   - MUST include the primary keyword "${primaryKeyword}"
+   - Compelling call-to-action
+
+2. CONTENT REQUIREMENTS:
    - Minimum 900 words
+   - The H1 title MUST include "${primaryKeyword}"
+   - The FIRST PARAGRAPH (within first 100 words) MUST include "${primaryKeyword}"
+   - Use "${primaryKeyword}" naturally 5-8 times throughout the content
+   - Include secondary keywords naturally
    - Clear H1, H2, H3 hierarchy
-   - First paragraph MUST include the primary keyword naturally
-   - Use keywords naturally throughout, no keyword stuffing
-   - Include bullet points, short paragraphs, and practical examples
-   - End with a concise conclusion
+   - Include bullet points and practical examples
+   - End with a conclusion
 
-KEYWORDS TO USE:
-- Primary: ${primaryKeyword}
-- Secondary: ${secondaryKeywords}
-- Long-tail: ${longTailKeywords}
+3. KEYWORD PLACEMENT CHECKLIST:
+   ✓ Primary keyword in H1 title
+   ✓ Primary keyword in first paragraph
+   ✓ Primary keyword appears 5-8 times in content
+   ✓ Primary keyword in excerpt
 
 OUTPUT FORMAT (JSON only):
 {
-  "excerpt": "...",
-  "content": "# H1 Title\\n\\nFirst paragraph with primary keyword...\\n\\n## H2 Section\\n\\n..."
+  "excerpt": "140-160 char description with ${primaryKeyword}...",
+  "content": "# H1 Title with ${primaryKeyword}\\n\\nFirst paragraph mentioning ${primaryKeyword} naturally...\\n\\n## H2 Section\\n\\n..."
 }
 
 Return ONLY valid JSON, no markdown code blocks, no explanations.`;
@@ -568,8 +580,5 @@ return res.json(payload);
       error: errorDetails,
       code: error.response?.data?.error?.code || error.response?.status,
     });
-  } finally {
-    // Always remove from in-flight set
-    contentInFlight.delete(cacheKey);
   }
 };

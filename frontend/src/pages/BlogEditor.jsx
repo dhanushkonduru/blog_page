@@ -325,7 +325,8 @@ const handleGenerateSeo = async (regenerate = false) => {
     const res = await api.post("/admin/blogs/ai/titles", {
       input: regenerate
         ? `${seoInput}\n\nGenerate more creative and higher CTR titles.`
-        : seoInput
+        : seoInput,
+      force: regenerate // Force bypass cache when regenerating
     });
 
     if (!res.data.success) {
@@ -371,7 +372,7 @@ const handleSelectTitle = async (title) => {
   setSeoError("");
 
   try {
-    const res = await api.post("/admin/blogs/ai/meta", { title });
+    const res = await api.post("/admin/blogs/ai/meta", { title, force: true });
     
     if (res.data.success && res.data.metaDescriptions) {
       setSeoMetaDescriptions(res.data.metaDescriptions);
@@ -446,6 +447,7 @@ const handleGenerateContentFromTitle = async () => {
       title: form.title,
       keywords,
       originalInput: form.title,
+      force: true
     });
 
     const payload = res.data?.data;
@@ -496,7 +498,8 @@ const handleRegenerateContentDirectly = async () => {
     const contentRes = await api.post("/admin/blogs/ai/content", {
       title: form.title, // Use the existing title, not firstResult.title
       keywords: firstResult.keywords,
-      originalInput: form.title
+      originalInput: form.title,
+      force: true
     });
 
     const payload = contentRes.data?.data;
@@ -640,7 +643,7 @@ const handleRegenerateContentDirectly = async () => {
           setSeoError("");
           
           try {
-            const res = await api.post("/admin/blogs/ai/meta", { title: form.title });
+            const res = await api.post("/admin/blogs/ai/meta", { title: form.title, force: true });
             if (res.data.success && res.data.metaDescriptions) {
               setSeoMetaDescriptions(res.data.metaDescriptions);
             }
